@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import axiosInstance from '../../services/axiosInstance';
 import ReportsManager from '../reports/components/ReportsManager';
 import { fleetApi } from '../fleet/api/fleetApi';
 import VehicleModal from '../fleet/components/VehicleModal';
+import { adminApi } from '../admin/api/adminApi';
 
 const AdminView = () => {
     const [activeTab, setActiveTab] = useState('USERS');
@@ -20,24 +20,7 @@ const AdminView = () => {
     // Active Modal Control State
     const [activeModal, setActiveModal] = useState({ type: null, data: null }); // type: 'VIEW' | 'EDIT'
     const [editingCar, setEditingCar] = useState(null);
-
-    // Dashboard Analytics State
-    const [stats] = useState({
-        totalUsers: 128,
-        activeFleet: 45,
-        totalBookings: 312,
-        totalRevenue: 245000,
-    });
-
-    // Chart Data Mock Sets
-    const revenueData = [
-        { month: 'Jan', revenue: 25000 },
-        { month: 'Feb', revenue: 38000 },
-        { month: 'Mar', revenue: 32000 },
-        { month: 'Apr', revenue: 45000 },
-        { month: 'May', revenue: 52000 },
-        { month: 'Jun', revenue: 53000 },
-    ];
+    const [isCarModalOpen, setIsCarModalOpen] = useState(false);
 
     // Data Management States
     const [users, setUsers] = useState([]);
@@ -57,18 +40,15 @@ const AdminView = () => {
         setError('');
         try {
             if (tab === 'USERS') {
-                const res = await axiosInstance.get('/api/admin/users');
-                setUsers(res.data || []);
+                setUsers(await adminApi.getUsers());
             } else if (tab === 'AGENCIES') {
-                setAgencies([]);
+                setAgencies(await adminApi.getAgencies());
             } else if (tab === 'CARS') {
-                const availableCars = await fleetApi.getAvailableVehicles();
-                setCars(availableCars || []);
+                setCars(await adminApi.getCars());
             } else if (tab === 'BOOKINGS') {
-                setBookings([]);
+                setBookings(await adminApi.getBookings());
             } else if (tab === 'BIDS') {
-                const res = await axiosInstance.get('/api/admin/bids');
-                setBids(res.data || []);
+                setBids(await adminApi.getBids());
             }
         } catch (err) {
             setError(`Failed to fetch ${tab.toLowerCase()} data.`);
@@ -81,14 +61,14 @@ const AdminView = () => {
     const handleDeleteItem = async (id, tabName) => {
         if (!window.confirm(`Are you sure you want to delete item #${id} from ${tabName}?`)) return;
         try {
-            const endpoint = tabName === 'USERS' ? `/api/admin/users/${id}`
-                : tabName === 'AGENCIES' ? `/api/admin/agencies/${id}`
-                    : tabName === 'CARS' ? `/api/cars/${id}`
-                        : `/api/admin/bids/${id}`;
             if (tabName === 'CARS') {
-                await fleetApi.deleteVehicleAsAdmin(id);
+                await adminApi.removeCar(id);
+            } else if (tabName === 'USERS') {
+                await adminApi.removeUser(id);
+            } else if (tabName === 'AGENCIES') {
+                await adminApi.removeAgency(id);
             } else {
-                await axiosInstance.delete(endpoint);
+                await adminApi.removeBid(id);
             }
             if (tabName === 'USERS') setUsers(users.filter(item => item.id !== id));
             if (tabName === 'AGENCIES') setAgencies(agencies.filter(item => item.id !== id));
@@ -101,17 +81,45 @@ const AdminView = () => {
 
     const handleUpdateBidStatus = async (bidId, newStatus) => {
         try {
-            await axiosInstance.patch(`/api/admin/bids/${bidId}/status`, null, { params: { status: newStatus } });
+            await adminApi.updateBidStatus(bidId, newStatus);
             setBids(bids.map(b => b.id === bidId ? { ...b, status: newStatus } : b));
         } catch (err) {
             alert('Failed to update bid status.');
         }
     };
 
+    const handleUpdateUserStatus = async (userId, status) => {
+        try {
+            const updatedUser = await adminApi.updateUserStatus(userId, status);
+            setUsers(users.map(user => user.id === userId ? updatedUser : user));
+        } catch (err) {
+            alert('Failed to update user status.');
+        }
+    };
+
+    const handleUpdateBookingStatus = async (bookingIdValue, status) => {
+        try {
+            const updatedBooking = await adminApi.updateBookingStatus(bookingIdValue, status);
+            setBookings(bookings.map(booking => booking.id === bookingIdValue ? updatedBooking : booking));
+        } catch (err) {
+            alert('Failed to update booking status.');
+        }
+    };
+
     const handleUpdateCar = async (carData, images) => {
-        const updatedCar = await fleetApi.updateVehicleAsAdmin(editingCar.id, carData, images);
-        setCars(cars.map(car => car.id === updatedCar.id ? updatedCar : car));
+        const updatedCar = editingCar
+            ? await fleetApi.updateVehicleAsAdmin(editingCar.id, carData, images)
+            : await adminApi.createCar(carData, null, images);
+
+        if (updatedCar?.id) {
+            setCars(editingCar
+                ? cars.map(car => car.id === updatedCar.id ? updatedCar : car)
+                : [updatedCar, ...cars]);
+        } else {
+            await fetchTabData('CARS');
+        }
         setEditingCar(null);
+        setIsCarModalOpen(false);
     };
 
     const handleFindAgency = async (event) => {
@@ -120,8 +128,8 @@ const AdminView = () => {
         setIsLoading(true);
         setError('');
         try {
-            const response = await axiosInstance.get(`/api/admin/agencies/${agencyId}`);
-            setAgencies(response.data ? [response.data] : []);
+            const agency = await adminApi.getAgency(agencyId);
+            setAgencies(agency ? [agency] : []);
         } catch (err) {
             setAgencies([]);
             setError('Agency was not found. Check the ID and try again.');
@@ -136,8 +144,8 @@ const AdminView = () => {
         setIsLoading(true);
         setError('');
         try {
-            const response = await axiosInstance.get(`/api/admin/bookings/${bookingId}`);
-            setBookings(response.data ? [response.data] : []);
+            const booking = await adminApi.getBooking(bookingId);
+            setBookings(booking ? [booking] : []);
         } catch (err) {
             setBookings([]);
             setError('Booking was not found. Check the ID and try again.');
@@ -149,7 +157,7 @@ const AdminView = () => {
     const handleCancelBooking = async (id) => {
         if (!window.confirm(`Cancel booking #${id}?`)) return;
         try {
-            await axiosInstance.patch(`/api/admin/bookings/${id}/cancel`);
+            await adminApi.cancelBooking(id);
             setBookings(bookings.map(booking => booking.id === id ? { ...booking, status: 'CANCELLED' } : booking));
         } catch (err) {
             alert('Failed to cancel booking.');
@@ -161,18 +169,27 @@ const AdminView = () => {
         e.preventDefault();
         const { data } = activeModal;
         try {
-            if (activeTab !== 'AGENCIES') {
-                throw new Error('Only agency updates are supported by the admin API.');
+            if (activeTab === 'USERS') {
+                const updatedUser = await adminApi.updateUser(data.id, data);
+                setUsers(users.map(user => user.id === data.id ? updatedUser : user));
+            } else if (activeTab === 'AGENCIES') {
+                const updatedAgency = await adminApi.updateAgency(data.id, data);
+                setAgencies(agencies.map(agency => agency.id === data.id ? updatedAgency : agency));
+            } else {
+                throw new Error('This record cannot be edited here.');
             }
-            const response = await axiosInstance.put(`/api/admin/agencies/${data.id}`, data);
-            setAgencies(agencies.map(i => i.id === data.id ? response.data : i));
             setActiveModal({ type: null, data: null });
         } catch (err) {
             alert(`Failed to save edits for ${activeTab}.`);
         }
     };
 
-    const maxRevenue = Math.max(...revenueData.map(d => d.revenue));
+    const stats = {
+        totalUsers: users.length,
+        activeFleet: cars.filter(car => car.isAvailable).length,
+        totalBookings: bookings.length,
+        totalRevenue: null,
+    };
 
     // Filtered Records
     const filteredUsers = users.filter(u => userRoleFilter === 'ALL' || u.role === userRoleFilter);
@@ -238,7 +255,7 @@ const AdminView = () => {
                 </div>
                 <div style={{ padding: '1rem 1.25rem', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                     <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Total Revenue</span>
-                    <h3 style={{ margin: '0.25rem 0 0 0', color: '#0f766e' }}>₹{stats.totalRevenue.toLocaleString('en-IN')}</h3>
+                    <h3 style={{ margin: '0.25rem 0 0 0', color: '#0f766e' }}>{stats.totalRevenue === null ? 'N/A' : `₹${stats.totalRevenue.toLocaleString('en-IN')}`}</h3>
                 </div>
             </div>
 
@@ -255,7 +272,7 @@ const AdminView = () => {
                             { id: 'USERS', label: 'User Management', count: users.length },
                             { id: 'AGENCIES', label: 'Agency Management', count: agencies.length },
                             { id: 'BOOKINGS', label: 'Booking Management', count: bookings.length },
-                            { id: 'CARS', label: 'Available Cars', count: cars.length },
+                            { id: 'CARS', label: 'Car Inventory', count: cars.length },
                             { id: 'BIDS', label: 'Bids Management', count: bids.length },
                             { id: 'REPORTS', label: 'Reports & Analytics', count: null }
                         ].map((tab) => {
@@ -339,10 +356,15 @@ const AdminView = () => {
                                                         <td style={{ padding: '0.75rem', color: '#64748b', fontSize: '0.875rem' }}>#{u.id}</td>
                                                         <td style={{ padding: '0.75rem', fontWeight: '500', color: '#1e293b', fontSize: '0.875rem' }}>{u.email}</td>
                                                         <td style={{ padding: '0.75rem' }}><span style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: '#f1f5f9', color: '#334155' }}>{u.role}</span></td>
-                                                        <td style={{ padding: '0.75rem', color: u.active ? '#16a34a' : '#dc2626', fontSize: '0.85rem', fontWeight: '500' }}>{u.active ? 'Active' : 'Suspended'}</td>
+                                                        <td style={{ padding: '0.75rem', fontSize: '0.85rem', fontWeight: '500' }}>
+                                                            <select value={u.status || 'ACTIVE'} onChange={(event) => handleUpdateUserStatus(u.id, event.target.value)} style={{ color: u.status === 'ACTIVE' ? '#16a34a' : '#dc2626', border: 'none', background: 'transparent', fontWeight: 600 }}>
+                                                                {['ACTIVE', 'SUSPENDED', 'BLOCKED'].map(status => <option key={status} value={status}>{status}</option>)}
+                                                            </select>
+                                                        </td>
                                                         <td style={{ padding: '0.75rem', textAlign: 'right' }}>
                                                             <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
                                                                 <button onClick={() => setActiveModal({ type: 'VIEW', data: u })} style={actionBtnStyle('#e2e8f0', '#334155')}>View</button>
+                                                                <button onClick={() => setActiveModal({ type: 'EDIT', data: { ...u } })} style={actionBtnStyle('#dbeafe', '#1d4ed8')}>Edit</button>
                                                                 <button onClick={() => handleDeleteItem(u.id, 'USERS')} style={actionBtnStyle('#fee2e2', '#b91c1c')}>Delete</button>
                                                             </div>
                                                         </td>
@@ -357,7 +379,12 @@ const AdminView = () => {
                             {/* 2. AGENCY MANAGEMENT */}
                             {activeTab === 'AGENCIES' && (
                                 <div>
-                                    <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', color: '#0f172a' }}>Agency Directory</h3>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                        <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>Agency Directory</h3>
+                                        <select value={agencyFilter} onChange={(event) => setAgencyFilter(event.target.value)} style={{ padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                                            {['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'ACTIVE', 'INACTIVE'].map(status => <option key={status} value={status}>{status}</option>)}
+                                        </select>
+                                    </div>
                                     <form onSubmit={handleFindAgency} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
                                         <input type="number" min="1" value={agencyId} onChange={(event) => setAgencyId(event.target.value)} placeholder="Agency ID" style={{ padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                                         <button type="submit" style={actionBtnStyle('#2563eb', '#ffffff')}>Find Agency</button>
@@ -391,7 +418,10 @@ const AdminView = () => {
                             {activeTab === 'CARS' && (
                                 <div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                        <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>Available Cars</h3>
+                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>Car Inventory</h3>
+                                            <button onClick={() => { setEditingCar(null); setIsCarModalOpen(true); }} style={actionBtnStyle('#2563eb', '#ffffff')}>Add Car</button>
+                                        </div>
                                         <div style={{ display: 'flex', gap: '0.35rem' }}>
                                             {['ALL', 'SEDAN', 'SUV', 'HATCHBACK', 'LUXURY'].map(cat => <button key={cat} onClick={() => setVehicleCategoryFilter(cat)} style={filterTabStyle(vehicleCategoryFilter === cat)}>{cat}</button>)}
                                         </div>
@@ -445,7 +475,12 @@ const AdminView = () => {
                             {activeTab === 'BOOKINGS' && (
                                 <div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                        <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>Booking Lookup</h3>
+                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>Booking Management</h3>
+                                            <select value={bookingStatusFilter} onChange={(event) => setBookingStatusFilter(event.target.value)} style={{ padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                                                {['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'COMPLETED'].map(status => <option key={status} value={status}>{status}</option>)}
+                                            </select>
+                                        </div>
                                         <form onSubmit={handleFindBooking} style={{ display: 'flex', gap: '0.5rem' }}>
                                             <input type="number" min="1" value={bookingId} onChange={(event) => setBookingId(event.target.value)} placeholder="Booking ID" style={{ padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                                             <button type="submit" style={actionBtnStyle('#2563eb', '#ffffff')}>Find Booking</button>
@@ -473,9 +508,9 @@ const AdminView = () => {
                                                         <td style={{ padding: '0.75rem', color: '#475569', fontSize: '0.85rem' }}>#{b.carId}</td>
                                                         <td style={{ padding: '0.75rem', fontWeight: '500', fontSize: '0.875rem' }}>₹{b.totalAmount}</td>
                                                         <td style={{ padding: '0.75rem' }}>
-                                                            <span style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: b.status === 'CONFIRMED' ? '#dcfce7' : '#fef3c7', color: b.status === 'CONFIRMED' ? '#15803d' : '#b45309' }}>
-                                                                {b.status}
-                                                            </span>
+                                                            <select value={b.status || 'PENDING'} onChange={(event) => handleUpdateBookingStatus(b.id, event.target.value)} style={{ padding: '0.25rem', border: '1px solid #cbd5e1', borderRadius: '4px', fontWeight: 600 }}>
+                                                                {['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'COMPLETED'].map(status => <option key={status} value={status}>{status}</option>)}
+                                                            </select>
                                                         </td>
                                                         <td style={{ padding: '0.75rem', textAlign: 'right' }}>
                                                             <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
@@ -612,9 +647,9 @@ const AdminView = () => {
             )}
 
             <VehicleModal
-                isOpen={Boolean(editingCar)}
+                isOpen={Boolean(editingCar) || isCarModalOpen}
                 initialData={editingCar}
-                onClose={() => setEditingCar(null)}
+                onClose={() => { setEditingCar(null); setIsCarModalOpen(false); }}
                 onSubmit={handleUpdateCar}
             />
         </div>

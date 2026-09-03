@@ -1,36 +1,43 @@
 import axios from 'axios';
-import { API_BASE_URL } from '../config/constants';
-import { tokenStorage } from './tokenStorage';
+import { getToken } from './tokenStorage';
 
-const API = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
+let backendOffline = false;
+
+export const isBackendOffline = () => backendOffline;
+
+const axiosInstance = axios.create({
+  baseURL: 'http://localhost:8080/api',
+  timeout: 5000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Interceptor 1: Attach Authorization Bearer Token
-API.interceptors.request.use(
-    (config) => {
-        const token = tokenStorage.getToken();
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => Promise.reject(error)
-);
-
-// Interceptor 2: Centralized Response & Token Expiry Handling
-API.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        if (error.response && error.response.status === 401) {
-            tokenStorage.clearSession();
-            window.location.href = '/login';
-        }
-        return Promise.reject(error);
+axiosInstance.interceptors.request.use(
+  (config) => {
+    const token = getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
+    return config;
+  },
+  (error) => Promise.reject(error)
 );
 
-export default API;
+axiosInstance.interceptors.response.use(
+  (response) => {
+    backendOffline = false;
+    window.dispatchEvent(new Event('backend:online'));
+    return response;
+  },
+  (error) => {
+    if (!error.response || error.response.status >= 500) {
+      backendOffline = true;
+      window.dispatchEvent(new Event('backend:offline'));
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export default axiosInstance;

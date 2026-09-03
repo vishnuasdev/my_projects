@@ -3,50 +3,70 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from '../routes/ProtectedRoute';
 import Spinner from '../components/feedback/Spinner';
 
+// Lazy-loaded Feature Components
 const LoginForm = lazy(() => import('../features/auth/components/LoginForm'));
 const RegisterForm = lazy(() => import('../features/auth/components/RegisterForm'));
-
-// Public View
-const PublicView = lazy(() => import('../features/dashboard/PublicView'));
+const ProfileView = lazy(() => import('../features/auth/components/ProfileView'));
 
 // Dashboards
+const PublicView = lazy(() => import('../features/dashboard/PublicView'));
 const CustomerDashboard = lazy(() => import('../features/dashboard/CustomerView'));
 const AgencyDashboard = lazy(() => import('../features/dashboard/AgencyView'));
 const OwnerDashboard = lazy(() => import('../features/dashboard/OwnerView'));
 const AdminDashboard = lazy(() => import('../features/dashboard/AdminView'));
 
-// Profile View Component
-const ProfileView = lazy(() => import('../features/auth/components/ProfileView')); 
+// Fallback Spinner
+const LoadingFallback = () => (
+    <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '4rem' }}>
+        <Spinner size="lg" />
+    </div>
+);
 
 const Router = () => {
+    const ALL_ROLES = ['CUSTOMER', 'AGENCY', 'OWNER', 'ADMIN'];
+
     return (
-        <Suspense fallback={<div style={{ paddingTop: '4rem' }}><Spinner size="lg" /></div>}>
+        <Suspense fallback={<LoadingFallback />}>
             <Routes>
-                {/* Public Home Page - Accessible to everyone */}
-                <Route 
-                    path="/" 
+                {/* Public Home Page */}
+                <Route
+                    path="/"
                     element={
                         <ProtectedRoute publicOnly>
                             <PublicView />
                         </ProtectedRoute>
-                    } 
+                    }
                 />
 
-                {/* Public Auth Routes */}
-                <Route path="/login" element={<LoginForm />} />
-                <Route path="/register" element={<RegisterForm />} />
+                {/* Public Auth Routes (Restricted for logged-in users) */}
+                <Route
+                    path="/login"
+                    element={
+                        <ProtectedRoute publicOnly>
+                            <LoginForm />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/register"
+                    element={
+                        <ProtectedRoute publicOnly>
+                            <RegisterForm />
+                        </ProtectedRoute>
+                    }
+                />
 
-                {/* Single General Profile Route */}
+                {/* Universal Profile Route */}
                 <Route
                     path="/profile"
                     element={
-                        <ProtectedRoute allowedRoles={['CUSTOMER', 'AGENCY', 'OWNER', 'ADMIN']}>
+                        <ProtectedRoute allowedRoles={ALL_ROLES}>
                             <ProfileView />
                         </ProtectedRoute>
                     }
                 />
 
-                {/* Role Specific Dashboards */}
+                {/* Role-Specific Dashboard Routes */}
                 <Route
                     path="/customer/dashboard"
                     element={
@@ -55,7 +75,6 @@ const Router = () => {
                         </ProtectedRoute>
                     }
                 />
-                
                 <Route
                     path="/agency/dashboard"
                     element={
@@ -64,7 +83,6 @@ const Router = () => {
                         </ProtectedRoute>
                     }
                 />
-
                 <Route
                     path="/owner/dashboard"
                     element={
@@ -73,7 +91,6 @@ const Router = () => {
                         </ProtectedRoute>
                     }
                 />
-
                 <Route
                     path="/admin/dashboard"
                     element={
@@ -83,39 +100,14 @@ const Router = () => {
                     }
                 />
 
-                {/* Role-Specific Profile Aliases */}
-                <Route
-                    path="/customer/profile"
-                    element={
-                        <ProtectedRoute allowedRoles={['CUSTOMER']}>
-                            <ProfileView />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/agency/profile"
-                    element={
-                        <ProtectedRoute allowedRoles={['AGENCY']}>
-                            <ProfileView />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/owner/profile"
-                    element={
-                        <ProtectedRoute allowedRoles={['OWNER']}>
-                            <ProfileView />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/admin/profile"
-                    element={
-                        <ProtectedRoute allowedRoles={['ADMIN']}>
-                            <ProfileView />
-                        </ProtectedRoute>
-                    }
-                />
+                {/* Consolidated Profile Redirects */}
+                {['/customer/profile', '/agency/profile', '/owner/profile', '/admin/profile'].map((path) => (
+                    <Route
+                        key={path}
+                        path={path}
+                        element={<Navigate to="/profile" replace />}
+                    />
+                ))}
 
                 {/* Fallback Catch-All */}
                 <Route path="*" element={<Navigate to="/" replace />} />

@@ -5,6 +5,7 @@ import com.example.car_rental_service.model.dto.request.UserRegistrationRequest;
 import com.example.car_rental_service.model.dto.response.JwtResponse;
 import com.example.car_rental_service.model.dto.response.UserResponse;
 import com.example.car_rental_service.model.entity.User;
+import com.example.car_rental_service.model.enums.UserStatus;
 import com.example.car_rental_service.model.mapper.UserMapper;
 import com.example.car_rental_service.security.JwtUtil;
 import com.example.car_rental_service.service.UserService;
@@ -18,6 +19,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -44,7 +47,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<JwtResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+        // 1. Authenticate user credentials first
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         loginRequest.getEmail(),
@@ -52,11 +56,25 @@ public class AuthController {
                 )
         );
 
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        // 2. Fetch user entity from database
         User user = userService.findByEmail(loginRequest.getEmail())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        // 3. Block access if status is BLOCKED or SUSPENDED
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            String message = user.getStatus() == UserStatus.BLOCKED
+                    ? "Your account has been blocked. Please contact system support."
+                    : "Your account is temporarily suspended. Access is denied.";
+
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "status", user.getStatus().name(),
+                    "message", message
+            ));
+        }
+
+        // 4. Set authentication context & generate token for ACTIVE users
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
         assert userDetails != null;
         String jwt = jwtUtil.generateToken(userDetails, user.getRole().name());

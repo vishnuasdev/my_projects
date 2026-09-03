@@ -4,7 +4,7 @@ import VehicleCard from '../fleet/components/VehicleCard';
 import VehicleModal from '../fleet/components/VehicleModal';
 import Button from '../../components/ui/Button';
 import Spinner from '../../components/feedback/Spinner';
-import axiosInstance from '../../services/axiosInstance';
+import { ownerApi } from '../auth/api/ownerApi';
 
 const OwnerView = () => {
     const [activeTab, setActiveTab] = useState('VEHICLES'); // 'VEHICLES' | 'BIDS' | 'CALLBACKS'
@@ -31,20 +31,17 @@ const OwnerView = () => {
     const fetchOwnerData = async () => {
         setLoading(true);
         setError('');
-        const results = await Promise.allSettled([
-            fleetApi.getMyVehicles(),
-            axiosInstance.get('/api/agencies'),
-            axiosInstance.get('/api/owner/bids'),
-            axiosInstance.get('/api/owner/callbacks')
-        ]);
+        const vehiclesResult = await Promise.allSettled([fleetApi.getMyVehicles()]);
+        const vehicles = vehiclesResult[0];
+        const vehicleList = vehicles.status === 'fulfilled' ? vehicles.value || [] : [];
+        const bidResults = await Promise.allSettled(vehicleList.map(vehicle => ownerApi.getBidsByCar(vehicle.id)));
 
-        const [vehicles, agencyList, bids, callbackList] = results;
         if (vehicles.status === 'fulfilled') setMyVehicles(vehicles.value || []);
-        if (agencyList.status === 'fulfilled') setAgencies(agencyList.value.data || []);
-        if (bids.status === 'fulfilled') setMyBids(bids.value.data || []);
-        if (callbackList.status === 'fulfilled') setCallbacks(callbackList.value.data || []);
+        setMyBids(bidResults.filter(result => result.status === 'fulfilled').flatMap(result => result.value || []));
+        setAgencies([]);
+        setCallbacks([]);
 
-        const failedRequests = results.filter(result => result.status === 'rejected');
+        const failedRequests = [vehicles, ...bidResults].filter(result => result.status === 'rejected');
         if (failedRequests.length > 0) {
             console.error('Some owner dashboard requests failed:', failedRequests);
             setError(`${failedRequests.length} dashboard service${failedRequests.length > 1 ? 's' : ''} unavailable. Try again.`);
@@ -104,7 +101,7 @@ const OwnerView = () => {
             return;
         }
         try {
-            await axiosInstance.post('/api/owner/bids', {
+            await ownerApi.placeBid({
                 carId: selectedVehicleForBid,
                 agencyId: selectedAgencyForBid,
                 ratePerDay: parseFloat(bidAmount),
@@ -127,20 +124,7 @@ const OwnerView = () => {
             alert('Please select an agency.');
             return;
         }
-        try {
-            await axiosInstance.post('/api/owner/callbacks', {
-                agencyId: callbackAgency,
-                note: callbackNote,
-                requestedAt: new Date().toISOString(),
-                status: 'PENDING'
-            });
-            alert('Callback request dispatched to agency.');
-            setCallbackAgency('');
-            setCallbackNote('');
-            fetchOwnerData();
-        } catch (err) {
-            alert('Failed to place callback request.');
-        }
+        alert('Callback requests are not available in the supplied owner controller.');
     };
 
     if (loading) return <Spinner size="lg" />;

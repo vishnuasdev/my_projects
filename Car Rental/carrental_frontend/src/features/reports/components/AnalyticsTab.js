@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { reportsApi } from '../api/reportsApi';
 import '../styles/Reports.css';
 
@@ -12,11 +12,7 @@ const AnalyticsTab = () => {
         type: 'all'
     });
 
-    useEffect(() => {
-        fetchAnalytics();
-    }, []);
-
-    const fetchAnalytics = async () => {
+    const fetchAnalytics = useCallback(async () => {
         setIsLoading(true);
         setError('');
         try {
@@ -27,7 +23,11 @@ const AnalyticsTab = () => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [filters]);
+
+    useEffect(() => {
+        fetchAnalytics();
+    }, [fetchAnalytics]);
 
     const handleFilterChange = (e) => {
         const { name, value } = e.target;

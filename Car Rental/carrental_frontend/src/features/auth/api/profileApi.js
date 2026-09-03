@@ -1,9 +1,11 @@
 import axiosInstance from '../../../services/axiosInstance';
 
 const getEndpoint = (role) => {
-    if (!role) return '/api/users/profile';
     const cleanRole = role.toLowerCase().replace('role_', '');
-    return `/api/${cleanRole}/profile`;
+    if (!['owner', 'agency'].includes(cleanRole)) {
+        throw new Error(`Profile endpoint is not available for role: ${cleanRole || 'unknown'}`);
+    }
+    return `/${cleanRole}/profile`;
 };
 
 export const fetchProfileByRole = async (role) => {
@@ -15,8 +17,8 @@ export const updateProfileByRole = async (role, profileData, image) => {
     const cleanRole = String(role || '').toUpperCase().replace('ROLE_', '');
     const requestData = cleanRole === 'CUSTOMER'
         ? createProfileFormData('customer', profileData, image)
-        : cleanRole === 'OWNER'
-            ? createProfileFormData('owner', profileData, image)
+        : ['OWNER', 'AGENCY'].includes(cleanRole)
+            ? createProfileFormData(cleanRole === 'AGENCY' ? 'agency' : 'owner', profileData, image)
             : profileData;
     const response = await axiosInstance.put(getEndpoint(role), requestData);
     return response.data;

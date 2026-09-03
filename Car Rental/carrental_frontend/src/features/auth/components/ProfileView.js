@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { fetchProfileByRole, updateProfileByRole } from '../api/profileApi';
-import Button from '../../../components/ui/Button';
 import Spinner from '../../../components/feedback/Spinner';
 
 const ProfileView = () => {
@@ -10,6 +9,7 @@ const ProfileView = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
     
     const [dbProfile, setDbProfile] = useState({});
     
@@ -32,6 +32,7 @@ const ProfileView = () => {
     const rawRole = user?.role || user?.roles || '';
     const userRoles = Array.isArray(rawRole) ? rawRole : [rawRole];
     const userRole = String(userRoles[0] || 'USER').toUpperCase().replace('ROLE_', '');
+    const profileApiAvailable = ['OWNER', 'AGENCY'].includes(userRole);
 
     const getDashboardPath = () => {
         if (userRole === 'CUSTOMER') return '/customer/dashboard';
@@ -46,6 +47,11 @@ const ProfileView = () => {
     const fetchProfile = useCallback(async () => {
         try {
             setLoading(true);
+            if (!profileApiAvailable) {
+                setDbProfile(user || {});
+                setForm(prev => ({ ...prev, name: user?.name || '', location: user?.location || '' }));
+                return;
+            }
             const data = await fetchProfileByRole(userRole) || {};
             
             setDbProfile(data);
@@ -69,7 +75,7 @@ const ProfileView = () => {
         } finally {
             setLoading(false);
         }
-    }, [userRole]);
+    }, [profileApiAvailable, user, userRole]);
 
     useEffect(() => {
         if (userRole) {
@@ -78,6 +84,7 @@ const ProfileView = () => {
     }, [userRole, fetchProfile]);
 
     const handleChange = (e) => {
+        if (!profileApiAvailable) return;
         const { name, value } = e.target;
         if (name.startsWith('addr_')) {
             const field = name.replace('addr_', '');
@@ -95,14 +102,20 @@ const ProfileView = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!profileApiAvailable) return;
+        if (userRole === 'AGENCY' && (!form.name.trim() || !form.location.trim() || !form.address.street.trim() || !form.address.city.trim() || !form.address.state.trim())) {
+            setSaveError('Agency name, location, street, city, and state are required.');
+            return;
+        }
         setSaving(true);
+        setSaveError('');
         try {
             const updatedData = await updateProfileByRole(userRole, form) || {};
             setDbProfile(updatedData);
             alert("Profile details saved successfully!");
         } catch (err) {
             console.error("Save error:", err);
-            alert("Failed to update profile details.");
+            setSaveError(err.response?.data?.message || err.response?.data?.error || "Failed to update profile details.");
         } finally {
             setSaving(false);
         }
@@ -380,13 +393,17 @@ const ProfileView = () => {
                         </button>
                     </div>
                     <p className="notice-text">
-                        {isFullyLocked() 
-                            ? "🔒 Details are saved to the database and locked for security." 
-                            : "⚠️ Details submitted to the database cannot be changed later."}
+                        {profileApiAvailable
+                            ? (isFullyLocked()
+                                ? 'Details are saved to the database and locked for security.'
+                                : 'Details submitted to the database cannot be changed later.')
+                            : 'Complete your profile details and save them to the database.'}
                     </p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="profile-form">
+                    {saveError && <div role="alert" style={{ color: '#b91c1c', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.75rem 1rem' }}>{saveError}</div>}
+                    <fieldset disabled={!profileApiAvailable} style={{ border: 0, padding: 0, margin: 0, display: 'contents' }}>
                     {/* Top Row: Email & Primary Location */}
                     <div className="grid-2">
                         <div className="field-group">
@@ -583,11 +600,12 @@ const ProfileView = () => {
                         </div>
                     </div>
 
+                    </fieldset>
                     <div className="btn-row">
                         <button type="button" className="cancel-button" onClick={handleCancel}>
                             Cancel
                         </button>
-                        {!isFullyLocked() && (
+                        {profileApiAvailable && !isFullyLocked() && (
                             <button type="submit" className="save-button" disabled={saving}>
                                 {saving ? 'Saving...' : 'Save Profile Details'}
                             </button>

@@ -1,53 +1,88 @@
 import React, { createContext, useState, useEffect } from 'react';
-import { tokenStorage } from '../services/tokenStorage';
-import { authApi } from '../features/auth/api/authApi';
 
+// Relative path to tokenStorage (located in src/services/)
+import tokenStorage from '../services/tokenStorage'; 
+
+// Relative path to auth API functions (located in src/features/auth/api/authApi or services/)
+import { loginUser, registerUser } from '../features/auth/api/authApi'; 
 
 export const AuthContext = createContext(null);
 
+const normalizeRole = (userInfo) => {
+  const rawRole = userInfo.role || userInfo.roles;
+  const role = Array.isArray(rawRole) ? rawRole[0] : rawRole;
+
+  return {
+    ...userInfo,
+    role: String(role || '').toUpperCase().replace('ROLE_', ''),
+  };
+};
+
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const initializeAuth = async () => {
-            const savedToken = tokenStorage.getToken();
-            const savedUser = tokenStorage.getUser();
+  // 1. Re-hydrate auth state on initial app load
+  useEffect(() => {
+    const initializeAuth = () => {
+      const token = tokenStorage.getToken();
+      const storedUser = tokenStorage.getUser();
 
-            if (savedToken && savedUser) {
-                setUser(savedUser);
-            }
-            setLoading(false);
-        };
-
-        initializeAuth();
-    }, []);
-
-    const login = async (credentials) => {
-        const data = await authApi.login(credentials);
-        const token = data.token || data.jwt;
-        const userData = data.user || { email: credentials.email, role: data.role };
-
-        tokenStorage.setToken(token);
-        tokenStorage.setUser(userData);
-        setUser(userData);
-        return userData;
-    };
-
-    const register = async (userData) => {
-        return await authApi.register(userData);
-    };
-
-    const logout = () => {
-        tokenStorage.clearSession();
+      if (token && storedUser) {
+        const normalizedUser = normalizeRole(storedUser);
+        tokenStorage.saveAuthData(token, normalizedUser);
+        setUser(normalizedUser);
+      } else {
+        tokenStorage.removeToken();
         setUser(null);
-        // Redirect to public view after logout
-        window.location.href = '/';
+      }
+      setLoading(false);
     };
 
-    return (
-        <AuthContext.Provider value={{ user, loading, login, register, logout }}>
-            {children}
-        </AuthContext.Provider>
-    );
+    initializeAuth();
+  }, []);
+
+  // 2. Login function
+  const login = async (credentials) => {
+    const data = await loginUser(credentials);
+    const { token, ...rawUserInfo } = data;
+    const userInfo = normalizeRole(rawUserInfo);
+
+    const status = String(userInfo.status || '').toUpperCase();
+
+    if (token && status === 'ACTIVE') {
+      tokenStorage.saveAuthData(token, userInfo);
+      setUser(userInfo);
+    } else if (status && status !== 'ACTIVE') {
+      tokenStorage.removeToken();
+      setUser(null);
+    }
+
+    return { ...data, ...userInfo };
+  };
+
+  // 3. Register function
+  const register = async (userData) => {
+    return await registerUser(userData);
+  };
+
+  // 4. Logout function
+  const logout = () => {
+    tokenStorage.removeToken();
+    setUser(null);
+  };
+
+  const value = {
+    user,
+    loading,
+    login,
+    register,
+    logout,
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 };

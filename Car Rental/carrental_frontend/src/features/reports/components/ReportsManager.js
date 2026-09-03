@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { reportsApi } from '../api/reportsApi';
 import ReportsTable from './ReportsTable';
 import ReportForm from './ReportForm';
@@ -17,13 +17,7 @@ const ReportsManager = () => {
         type: 'ALL'
     });
 
-    useEffect(() => {
-        if (activeTab === 'REPORTS') {
-            fetchReports();
-        }
-    }, [activeTab, filters]);
-
-    const fetchReports = async () => {
+    const fetchReports = useCallback(async () => {
         setIsLoading(true);
         setError('');
         try {
@@ -35,7 +29,11 @@ const ReportsManager = () => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [filters]);
+
+    useEffect(() => {
+        if (activeTab === 'REPORTS') fetchReports();
+    }, [activeTab, fetchReports]);
 
     const handleCreateReport = () => {
         setEditingReport(null);

@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
 
-const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
-    const initialFormState = {
-        brand: '',
-        model: '',
-        registrationNo: '',
-        fuelType: 'Diesel',
-        transmission: 'Manual',
-        dailyRate: '',
-        description: '',
-        isAvailable: true,
-    };
+const initialFormState = {
+    brand: '',
+    model: '',
+    registrationNo: '',
+    fuelType: 'Diesel',
+    transmission: 'Manual',
+    dailyRate: '',
+    description: '',
+    isAvailable: true,
+};
 
+const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
     const [carData, setCarData] = useState({ ...initialFormState, ...initialData });
     const [selectedImages, setSelectedImages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);

@@ -47,7 +47,12 @@ public class BidServiceImpl implements BidService {
 
         Bid bid = optionalBid.get();
         try {
-            bid.setStatus(BidStatus.valueOf(status.toUpperCase().trim()));
+            BidStatus nextStatus = BidStatus.valueOf(status.toUpperCase().trim());
+            bid.setStatus(nextStatus);
+            if (nextStatus == BidStatus.ACCEPTED && bid.getCar() != null) {
+                bid.getCar().setBidStatus(BidStatus.ACCEPTED);
+                bid.getCar().setAvailable(true);
+            }
         } catch (IllegalArgumentException | NullPointerException e) {
             throw new IllegalArgumentException("Invalid BidStatus provided: " + status);
         }

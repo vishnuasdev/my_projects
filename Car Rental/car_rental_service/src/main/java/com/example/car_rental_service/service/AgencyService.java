@@ -26,6 +26,10 @@ public interface AgencyService {
 
     Agency updateAgency(Long id, Agency updatedAgency, MultipartFile image) throws IOException;
 
+    Agency getMyProfile();
+
+    Agency updateMyProfile(Agency updatedAgency, MultipartFile image) throws IOException;
+
     Agency patchAgency(Long id, Agency partialAgency);
 
     Agency updateAgencyImage(Long id, MultipartFile image) throws IOException;
@@ -47,6 +51,8 @@ public interface AgencyService {
     Car updateMyAgencyCarAvailability(Long carId, boolean isAvailable);
 
     List<Bid> getAcceptedBids();
+
+    List<Bid> getMyBids();
 
     List<Booking> getCustomerBookingsForAgency();
 

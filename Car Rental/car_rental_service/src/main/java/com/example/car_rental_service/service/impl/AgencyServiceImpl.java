@@ -152,6 +152,18 @@ public class AgencyServiceImpl implements AgencyService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Agency getMyProfile() {
+        return getAuthenticatedAgency();
+    }
+
+    @Override
+    public Agency updateMyProfile(Agency updatedAgency, MultipartFile image) throws IOException {
+        Agency currentAgency = getAuthenticatedAgency();
+        return updateAgency(currentAgency.getId(), updatedAgency, image);
+    }
+
+    @Override
     public Agency patchAgency(Long id, Agency partialAgency) {
         String email = getAuthenticatedUserEmail();
         Agency agency = agencyRepository.findById(id)
@@ -289,6 +301,13 @@ public class AgencyServiceImpl implements AgencyService {
     public List<Bid> getAcceptedBids() {
         Agency currentAgency = getAuthenticatedAgency();
         return bidRepository.findByAgencyIdAndStatus(currentAgency.getId(), BidStatus.ACCEPTED);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Bid> getMyBids() {
+        Agency currentAgency = getAuthenticatedAgency();
+        return bidRepository.findByAgencyId(currentAgency.getId());
     }
 
     // --- CUSTOMER BOOKING MANAGEMENT FOR AGENCY CARS ---

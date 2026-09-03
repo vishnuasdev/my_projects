@@ -51,6 +51,11 @@ public class AgencyController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/profile")
+    public ResponseEntity<Agency> getMyProfile() {
+        return ResponseEntity.ok(agencyService.getMyProfile());
+    }
+
     @GetMapping("/{id}/image")
     public ResponseEntity<byte[]> getAgencyImage(@PathVariable @Positive Long id) {
         Agency agency = agencyService.getAgencyById(id)
@@ -71,6 +76,13 @@ public class AgencyController {
             @RequestPart(value = "image", required = false) MultipartFile image) throws IOException {
         Agency updated = agencyService.updateAgency(id, agency, image);
         return ResponseEntity.ok(updated);
+    }
+
+    @PutMapping(value = "/profile", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Agency> updateMyProfile(
+            @RequestPart("agency") @Valid Agency agency,
+            @RequestPart(value = "image", required = false) MultipartFile image) throws IOException {
+        return ResponseEntity.ok(agencyService.updateMyProfile(agency, image));
     }
 
     @PatchMapping("/{id}")
@@ -114,6 +126,11 @@ public class AgencyController {
     @GetMapping("/bids/accepted")
     public ResponseEntity<List<Bid>> getAcceptedBids() {
         return ResponseEntity.ok(agencyService.getAcceptedBids());
+    }
+
+    @GetMapping("/bids")
+    public ResponseEntity<List<Bid>> getMyBids() {
+        return ResponseEntity.ok(agencyService.getMyBids());
     }
 
     // 4. View Customer Bookings for Agency Cars

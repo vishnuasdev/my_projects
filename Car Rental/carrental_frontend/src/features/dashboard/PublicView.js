@@ -36,7 +36,7 @@ const PublicView = ({ isCustomerView = false }) => {
         setIsLoading(true);
         setError('');
         try {
-            const response = await axiosInstance.get('/api/cars/available');
+            const response = await axiosInstance.get('/cars/available');
             const carList = response.data || [];
             setCars(carList);
             setFilteredCars(carList);
