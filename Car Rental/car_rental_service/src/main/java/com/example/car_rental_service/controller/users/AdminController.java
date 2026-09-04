@@ -6,6 +6,7 @@ import com.example.car_rental_service.model.entity.Booking;
 import com.example.car_rental_service.model.entity.Car;
 import com.example.car_rental_service.model.entity.User;
 import com.example.car_rental_service.model.entity.users.Agency;
+import com.example.car_rental_service.model.entity.users.Owner;
 import com.example.car_rental_service.model.enums.AgencyStatus;
 import com.example.car_rental_service.model.enums.BookingStatus;
 import com.example.car_rental_service.model.enums.Role;
@@ -36,17 +37,19 @@ public class AdminController {
     private final BidService bidService;
     private final BookingService bookingService;
     private final AgencyService agencyService;
+    private final OwnerService ownerService;
 
     public AdminController(UserService userService,
                            CarService carService,
                            BidService bidService,
                            BookingService bookingService,
-                           AgencyService agencyService) {
+                           AgencyService agencyService, OwnerService ownerService) {
         this.userService = userService;
         this.carService = carService;
         this.bidService = bidService;
         this.bookingService = bookingService;
         this.agencyService = agencyService;
+        this.ownerService = ownerService;
     }
 
     // ==========================================
@@ -288,5 +291,25 @@ public class AdminController {
     public ResponseEntity<Void> forceCancelBooking(@PathVariable @Positive Long id) {
         bookingService.cancelBooking(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // --- ADMIN ENDPOINTS ---
+
+    @PutMapping("/admin/{id}")
+    public ResponseEntity<Owner> updateOwnerByAdmin(
+            @PathVariable @Positive Long id,
+            @RequestBody Owner owner) {
+        return ownerService.updateOwnerByAdmin(id, owner)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/admin/{id}")
+    public ResponseEntity<Void> deleteOwnerByAdmin(@PathVariable @Positive Long id) {
+        boolean deleted = ownerService.deleteOwnerByAdmin(id);
+        if (deleted) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.notFound().build();
     }
 }

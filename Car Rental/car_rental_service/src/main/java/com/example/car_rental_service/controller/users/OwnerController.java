@@ -3,9 +3,11 @@ package com.example.car_rental_service.controller.users;
 import com.example.car_rental_service.model.dto.response.UserResponse;
 import com.example.car_rental_service.model.entity.Bid;
 import com.example.car_rental_service.model.entity.Car;
+import com.example.car_rental_service.model.entity.users.Agency;
 import com.example.car_rental_service.model.entity.users.Owner;
 import com.example.car_rental_service.service.BidService;
 import com.example.car_rental_service.service.CarService;
+import com.example.car_rental_service.service.AgencyService;
 import com.example.car_rental_service.service.OwnerService;
 
 import jakarta.validation.Valid;
@@ -32,11 +34,14 @@ public class OwnerController {
     private final CarService carService;
     private final OwnerService ownerService;
     private final BidService bidService;
+    private final AgencyService agencyService;
 
-    public OwnerController(CarService carService, OwnerService ownerService, BidService bidService) {
+    public OwnerController(CarService carService, OwnerService ownerService, BidService bidService,
+                           AgencyService agencyService) {
         this.carService = carService;
         this.ownerService = ownerService;
         this.bidService = bidService;
+        this.agencyService = agencyService;
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -106,25 +111,6 @@ public class OwnerController {
         return ResponseEntity.notFound().build();
     }
 
-    // --- ADMIN ENDPOINTS ---
-
-    @PutMapping("/admin/{id}")
-    public ResponseEntity<Owner> updateOwnerByAdmin(
-            @PathVariable @Positive Long id,
-            @RequestBody Owner owner) {
-        return ownerService.updateOwnerByAdmin(id, owner)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
-    }
-
-    @DeleteMapping("/admin/{id}")
-    public ResponseEntity<Void> deleteOwnerByAdmin(@PathVariable @Positive Long id) {
-        boolean deleted = ownerService.deleteOwnerByAdmin(id);
-        if (deleted) {
-            return ResponseEntity.noContent().build();
-        }
-        return ResponseEntity.notFound().build();
-    }
 
     // --- CAR MANAGEMENT ---
 
@@ -221,5 +207,10 @@ public class OwnerController {
     public ResponseEntity<List<Bid>> getBidsByCar(@PathVariable Long carId) {
         List<Bid> bids = bidService.getBidsByCar(carId);
         return ResponseEntity.ok(bids);
+    }
+
+    @GetMapping("/agencies")
+    public ResponseEntity<List<Agency>> getApprovedAgencies() {
+        return ResponseEntity.ok(agencyService.getAgenciesByStatus(com.example.car_rental_service.model.enums.AgencyStatus.APPROVED));
     }
 }

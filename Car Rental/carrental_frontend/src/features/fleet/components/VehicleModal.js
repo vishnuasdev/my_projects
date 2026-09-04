@@ -9,6 +9,7 @@ const initialFormState = {
     dailyRate: '',
     description: '',
     isAvailable: true,
+    agencyRemarks: '',
 };
 
 const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
@@ -19,6 +20,8 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
 
     useEffect(() => {
         setCarData({ ...initialFormState, ...initialData });
+        setSelectedImages([]);
+        setError('');
     }, [initialData]);
 
     if (!isOpen) return null;
@@ -32,7 +35,15 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
     };
 
     const handleFileChange = (e) => {
-        setSelectedImages(Array.from(e.target.files));
+        const images = Array.from(e.target.files);
+        const existingImageCount = Number(initialData?.imageCount || 0);
+        if (existingImageCount + images.length > 5) {
+            setSelectedImages([]);
+            setError(`A vehicle can have a maximum of 5 images. Select no more than ${Math.max(0, 5 - existingImageCount)} new image(s).`);
+            return;
+        }
+        setSelectedImages(images);
+        setError('');
     };
 
     const resetForm = () => {
@@ -61,6 +72,7 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
             dailyRate: Number(carData.dailyRate),
             description: carData.description.trim(),
             isAvailable: Boolean(carData.isAvailable),
+            agencyRemarks: carData.agencyRemarks.trim(),
         };
 
         if (!Number.isFinite(payload.dailyRate) || payload.dailyRate < 0.01) {
@@ -92,15 +104,20 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '1rem'
+            padding: '1rem',
+            boxSizing: 'border-box',
+            overflowY: 'auto'
         }}>
             <div style={{
                 backgroundColor: '#ffffff',
                 borderRadius: '12px',
                 width: '100%',
                 maxWidth: '540px',
+                maxHeight: 'calc(100vh - 2rem)',
                 boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
                 overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
                 fontFamily: 'system-ui, -apple-system, sans-serif'
             }}>
                 {/* Header */}
@@ -142,7 +159,7 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                 )}
 
                 {/* Form Body */}
-                <form onSubmit={handleSubmit} style={{ padding: '1.5rem' }}>
+                <form onSubmit={handleSubmit} style={{ padding: '1.5rem', overflowY: 'auto' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                         <div>
                             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: '#334155', marginBottom: '0.35rem' }}>
@@ -304,6 +321,21 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                                 fontFamily: 'inherit',
                                 boxSizing: 'border-box'
                             }}
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: '#334155', marginBottom: '0.35rem' }}>
+                            Agency Remarks
+                        </label>
+                        <textarea
+                            name="agencyRemarks"
+                            rows="2"
+                            placeholder="Add notes about this vehicle"
+                            value={carData.agencyRemarks}
+                            onChange={handleChange}
+                            maxLength="500"
+                            style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' }}
                         />
                     </div>
 

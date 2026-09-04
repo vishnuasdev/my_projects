@@ -13,6 +13,13 @@ const createImageFormData = (image) => {
     return formData;
 };
 
+const createCarFormData = (car, images = []) => {
+    const formData = new FormData();
+    formData.append('car', new Blob([JSON.stringify(car)], { type: 'application/json' }));
+    images.forEach((image) => formData.append('images', image));
+    return formData;
+};
+
 export const agencyApi = {
     create: async (agency, image) => (await API.post('/agency', createFormData('agency', agency, image))).data,
     getById: async (id) => (await API.get(`/agency/${id}`)).data,
@@ -22,10 +29,13 @@ export const agencyApi = {
     updateImage: async (id, image) => (await API.patch(`/agency/${id}/image`, createImageFormData(image))).data,
     remove: async (id) => (await API.delete(`/agency/${id}`)).data,
     getCars: async () => (await API.get('/agency/cars')).data,
+    updateCar: async (id, car, images = []) => (await API.put(`/agency/cars/${id}`, createCarFormData(car, images), { headers: { 'Content-Type': 'multipart/form-data' } })).data,
     setCarAvailability: async (carId, available) => (await API.patch(`/agency/cars/${carId}/availability`, null, { params: { available } })).data,
     getAcceptedBids: async () => (await API.get('/agency/bids/accepted')).data,
     getBids: async () => (await API.get('/agency/bids')).data,
     getBookings: async () => (await API.get('/agency/bookings')).data,
+    getCallbackRequests: async () => (await API.get('/agency/callback-requests')).data,
+    updateCallbackRequestStatus: async (id, status) => (await API.patch(`/agency/callback-requests/${id}/status`, null, { params: { status } })).data,
     updateBookingStatus: async (bookingId, status) => (await API.patch(`/agency/bookings/${bookingId}/status`, null, { params: { status } })).data,
     getBookingsForCars: async () => (await API.get('/agency/agency-cars')).data,
     updateBidStatus: async (id, status) => (await API.patch(`/agency/${id}/status`, null, { params: { status } })).data,

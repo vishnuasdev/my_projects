@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getToken } from './tokenStorage';
+import { getToken, removeToken } from './tokenStorage';
 
 let backendOffline = false;
 
@@ -31,6 +31,11 @@ axiosInstance.interceptors.response.use(
     return response;
   },
   (error) => {
+    if (error.response?.status === 401) {
+      removeToken();
+      window.dispatchEvent(new Event('auth:expired'));
+    }
+
     if (!error.response || error.response.status >= 500) {
       backendOffline = true;
       window.dispatchEvent(new Event('backend:offline'));

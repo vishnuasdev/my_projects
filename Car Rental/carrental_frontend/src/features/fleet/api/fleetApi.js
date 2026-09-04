@@ -32,13 +32,13 @@ export const fleetApi = {
 
     createVehicle: async (vehicleData, images = []) => {
         const formData = createCarFormData(vehicleData, images);
-        const response = await API.post('/owner/cars', formData);
+        const response = await API.post('/owner/cars', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
         return response.data;
     },
 
     updateVehicle: async (id, vehicleData, images = []) => {
         const formData = createCarFormData(vehicleData, images);
-        const response = await API.put(`/owner/cars/${id}`, formData);
+        const response = await API.put(`/owner/cars/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
         return response.data;
     },
 
@@ -58,7 +58,7 @@ export const fleetApi = {
 
     updateVehicleAsAdmin: async (id, vehicleData, images = []) => {
         const formData = createCarFormData(vehicleData, images);
-        const response = await API.put(`/cars/${id}`, formData);
+        const response = await API.put(`/cars/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
         return response.data;
     },
 

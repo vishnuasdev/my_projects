@@ -4,7 +4,6 @@ import com.example.car_rental_service.model.entity.Bid;
 import com.example.car_rental_service.model.entity.Booking;
 import com.example.car_rental_service.model.entity.Car;
 import com.example.car_rental_service.model.entity.users.Agency;
-import com.example.car_rental_service.model.enums.AgencyStatus;
 import com.example.car_rental_service.model.enums.BookingStatus;
 import com.example.car_rental_service.service.AgencyService;
 import com.example.car_rental_service.service.BidService;
@@ -165,5 +164,6 @@ public class AgencyController {
         List<Bid> bids = bidService.getBidsByAgency(agencyId);
         return ResponseEntity.ok(bids);
     }
+
 
 }

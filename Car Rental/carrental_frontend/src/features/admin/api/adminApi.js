@@ -23,7 +23,7 @@ export const adminApi = {
         formData.append('car', new Blob([JSON.stringify(car)], { type: 'application/json' }));
         if (agencyId) formData.append('agencyId', agencyId);
         images.forEach((image) => formData.append('images', image));
-        return (await API.post('/admin/cars/add', formData)).data;
+        return (await API.post('/admin/cars/add', formData, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
     },
     removeCar: async (id) => (await API.delete(`/admin/cars/${id}`)).data,
     getBids: async () => (await API.get('/admin/bids')).data,

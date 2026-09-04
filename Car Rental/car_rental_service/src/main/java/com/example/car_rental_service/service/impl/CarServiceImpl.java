@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -156,6 +157,10 @@ public class CarServiceImpl implements CarService {
     }
 
     private void processAndAttachImages(Car car, List<MultipartFile> images, boolean append) throws IOException {
+        if (car.getImages() == null) {
+            car.setImages(new ArrayList<>());
+        }
+
         if (!append) {
             car.getImages().clear();
         }

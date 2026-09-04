@@ -42,6 +42,12 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
   }, []);
 
+  useEffect(() => {
+    const handleAuthExpired = () => setUser(null);
+    window.addEventListener('auth:expired', handleAuthExpired);
+    return () => window.removeEventListener('auth:expired', handleAuthExpired);
+  }, []);
+
   // 2. Login function
   const login = async (credentials) => {
     const data = await loginUser(credentials);

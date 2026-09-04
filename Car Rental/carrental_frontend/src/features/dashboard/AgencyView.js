@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import BookingTable from '../bookings/components/BookingTable';
 import Spinner from '../../components/feedback/Spinner';
 import { agencyApi } from '../agency/api/agencyApi';
+import VehicleModal from '../fleet/components/VehicleModal';
 
 const tabs = [
     { id: 'BOOKINGS', label: 'Customer Bookings' },
     { id: 'BIDS', label: 'Owner Bid Requests' },
     { id: 'FLEET', label: 'Fleet & Availability' },
+    { id: 'CALLBACKS', label: 'Callback Requests' },
 ];
 
 const statusStyle = (status) => ({
@@ -20,18 +22,21 @@ const AgencyView = () => {
     const [bookings, setBookings] = useState([]);
     const [bids, setBids] = useState([]);
     const [cars, setCars] = useState([]);
+    const [callbacks, setCallbacks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [busyId, setBusyId] = useState(null);
+    const [editingCar, setEditingCar] = useState(null);
 
     const fetchData = async () => {
         setLoading(true);
         setError('');
-        const results = await Promise.allSettled([agencyApi.getBookings(), agencyApi.getBids(), agencyApi.getCars()]);
-        const [bookingResult, bidResult, carResult] = results;
+        const results = await Promise.allSettled([agencyApi.getBookings(), agencyApi.getBids(), agencyApi.getCars(), agencyApi.getCallbackRequests()]);
+        const [bookingResult, bidResult, carResult, callbackResult] = results;
         if (bookingResult.status === 'fulfilled') setBookings(bookingResult.value || []);
         if (bidResult.status === 'fulfilled') setBids(bidResult.value || []);
         if (carResult.status === 'fulfilled') setCars(carResult.value || []);
+        if (callbackResult.status === 'fulfilled') setCallbacks(callbackResult.value || []);
         if (results.some(result => result.status === 'rejected')) setError('Some agency details could not be loaded. Please try again.');
         setLoading(false);
     };
@@ -59,6 +64,29 @@ const AgencyView = () => {
         finally { setBusyId(null); }
     };
 
+    const handleUpdateCar = async (carData, images) => {
+        try {
+            await agencyApi.updateCar(editingCar.id, carData, images);
+            setEditingCar(null);
+            await fetchData();
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || 'Unable to update car details.');
+            throw requestError;
+        }
+    };
+
+    const handleCallbackStatus = async (requestId, status) => {
+        setBusyId(requestId);
+        try {
+            const updated = await agencyApi.updateCallbackRequestStatus(requestId, status);
+            setCallbacks(current => current.map(request => request.id === updated.id ? updated : request));
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || 'Unable to update callback request.');
+        } finally {
+            setBusyId(null);
+        }
+    };
+
     if (loading) return <Spinner size="lg" />;
 
     return (
@@ -73,7 +101,14 @@ const AgencyView = () => {
             </div>
             {activeTab === 'BOOKINGS' && <BookingTable bookings={bookings} onStatusUpdate={handleBookingStatus} isAgency={true} />}
             {activeTab === 'BIDS' && <BidTable bids={bids} busyId={busyId} onStatusUpdate={handleBidStatus} />}
-            {activeTab === 'FLEET' && <FleetTable cars={cars} busyId={busyId} onAvailabilityChange={handleAvailability} />}
+            {activeTab === 'FLEET' && <FleetTable cars={cars} busyId={busyId} onAvailabilityChange={handleAvailability} onEdit={setEditingCar} />}
+            {activeTab === 'CALLBACKS' && <CallbackTable callbacks={callbacks} busyId={busyId} onStatusChange={handleCallbackStatus} />}
+            <VehicleModal
+                isOpen={Boolean(editingCar)}
+                initialData={editingCar}
+                onClose={() => setEditingCar(null)}
+                onSubmit={handleUpdateCar}
+            />
         </div>
     );
 };
@@ -83,9 +118,14 @@ const BidTable = ({ bids, busyId, onStatusUpdate }) => {
     return <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}><thead><tr style={{ background: '#f1f5f9', textAlign: 'left' }}><th style={{ padding: '0.75rem' }}>Vehicle</th><th style={{ padding: '0.75rem' }}>Owner</th><th style={{ padding: '0.75rem' }}>Rate/Day</th><th style={{ padding: '0.75rem' }}>Status</th><th style={{ padding: '0.75rem', textAlign: 'right' }}>Actions</th></tr></thead><tbody>{bids.map(bid => { const status = String(bid.status || 'PENDING').toUpperCase(); return <tr key={bid.id} style={{ borderBottom: '1px solid #e2e8f0' }}><td style={{ padding: '0.75rem', fontWeight: 600 }}>{bid.car ? `${bid.car.brand || ''} ${bid.car.model || ''}` : `Car #${bid.carId || bid.id}`}</td><td style={{ padding: '0.75rem' }}>{bid.owner?.name || bid.owner?.email || `Owner #${bid.owner?.id || '-'}`}</td><td style={{ padding: '0.75rem' }}>₹{Number(bid.ratePerDay || 0).toLocaleString('en-IN')}</td><td style={{ padding: '0.75rem' }}><span style={statusStyle(status)}>{status}</span></td><td style={{ padding: '0.75rem', textAlign: 'right' }}>{status === 'PENDING' && <span style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem' }}><button disabled={busyId === bid.id} onClick={() => onStatusUpdate(bid, 'ACCEPTED')} style={{ padding: '0.4rem 0.65rem', border: 0, borderRadius: '4px', color: '#fff', background: '#16a34a', cursor: 'pointer' }}>Accept & Rent</button><button disabled={busyId === bid.id} onClick={() => onStatusUpdate(bid, 'REJECTED')} style={{ padding: '0.4rem 0.65rem', border: 0, borderRadius: '4px', color: '#fff', background: '#dc2626', cursor: 'pointer' }}>Reject</button></span>}</td></tr>; })}</tbody></table></div>;
 };
 
-const FleetTable = ({ cars, busyId, onAvailabilityChange }) => {
+const FleetTable = ({ cars, busyId, onAvailabilityChange, onEdit }) => {
     if (!cars.length) return <p style={{ color: '#64748b', textAlign: 'center', padding: '2rem' }}>No cars assigned to this agency.</p>;
-    return <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}><thead><tr style={{ background: '#f1f5f9', textAlign: 'left' }}><th style={{ padding: '0.75rem' }}>Vehicle</th><th style={{ padding: '0.75rem' }}>Registration</th><th style={{ padding: '0.75rem' }}>Fuel / Transmission</th><th style={{ padding: '0.75rem' }}>Rate/Day</th><th style={{ padding: '0.75rem' }}>Bid Status</th><th style={{ padding: '0.75rem' }}>Availability</th></tr></thead><tbody>{cars.map(car => { const bidStatus = String(car.bidStatus || 'PENDING').toUpperCase(); return <tr key={car.id} style={{ borderBottom: '1px solid #e2e8f0' }}><td style={{ padding: '0.75rem', fontWeight: 600 }}>{car.brand} {car.model}<div style={{ color: '#64748b', fontWeight: 400, marginTop: '0.2rem' }}>{car.description || 'No description'}</div></td><td style={{ padding: '0.75rem' }}>{car.registrationNo || '-'}</td><td style={{ padding: '0.75rem' }}>{car.fuelType || '-'} / {car.transmission || '-'}</td><td style={{ padding: '0.75rem' }}>₹{Number(car.dailyRate || 0).toLocaleString('en-IN')}</td><td style={{ padding: '0.75rem' }}><span style={statusStyle(bidStatus)}>{bidStatus}</span></td><td style={{ padding: '0.75rem' }}><button disabled={busyId === car.id || bidStatus !== 'ACCEPTED'} onClick={() => onAvailabilityChange(car)} style={{ padding: '0.4rem 0.65rem', border: 0, borderRadius: '4px', color: '#fff', background: car.isAvailable ? '#16a34a' : '#64748b', cursor: bidStatus === 'ACCEPTED' ? 'pointer' : 'not-allowed' }}>{car.isAvailable ? 'Available' : 'Unavailable'}</button></td></tr>; })}</tbody></table></div>;
+    return <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}><thead><tr style={{ background: '#f1f5f9', textAlign: 'left' }}><th style={{ padding: '0.75rem' }}>Vehicle</th><th style={{ padding: '0.75rem' }}>Registration</th><th style={{ padding: '0.75rem' }}>Fuel / Transmission</th><th style={{ padding: '0.75rem' }}>Rate/Day</th><th style={{ padding: '0.75rem' }}>Bid Status</th><th style={{ padding: '0.75rem' }}>Availability</th><th style={{ padding: '0.75rem', textAlign: 'right' }}>Actions</th></tr></thead><tbody>{cars.map(car => { const bidStatus = String(car.bidStatus || 'PENDING').toUpperCase(); return <tr key={car.id} style={{ borderBottom: '1px solid #e2e8f0' }}><td style={{ padding: '0.75rem', fontWeight: 600 }}>{car.brand} {car.model}<div style={{ color: '#64748b', fontWeight: 400, marginTop: '0.2rem' }}>{car.description || 'No description'}</div></td><td style={{ padding: '0.75rem' }}>{car.registrationNo || '-'}</td><td style={{ padding: '0.75rem' }}>{car.fuelType || '-'} / {car.transmission || '-'}</td><td style={{ padding: '0.75rem' }}>₹{Number(car.dailyRate || 0).toLocaleString('en-IN')}</td><td style={{ padding: '0.75rem' }}><span style={statusStyle(bidStatus)}>{bidStatus}</span></td><td style={{ padding: '0.75rem' }}><button disabled={busyId === car.id || bidStatus !== 'ACCEPTED'} onClick={() => onAvailabilityChange(car)} style={{ padding: '0.4rem 0.65rem', border: 0, borderRadius: '4px', color: '#fff', background: car.isAvailable ? '#16a34a' : '#64748b', cursor: bidStatus === 'ACCEPTED' ? 'pointer' : 'not-allowed' }}>{car.isAvailable ? 'Available' : 'Unavailable'}</button></td><td style={{ padding: '0.75rem', textAlign: 'right' }}><button onClick={() => onEdit(car)} style={{ padding: '0.4rem 0.65rem', border: 0, borderRadius: '4px', color: '#1d4ed8', background: '#dbeafe', cursor: 'pointer' }}>Edit</button></td></tr>; })}</tbody></table></div>;
+};
+
+const CallbackTable = ({ callbacks, busyId, onStatusChange }) => {
+    if (!callbacks.length) return <p style={{ color: '#64748b', textAlign: 'center', padding: '2rem' }}>No callback requests found.</p>;
+    return <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}><thead><tr style={{ background: '#f1f5f9', textAlign: 'left' }}><th style={{ padding: '0.75rem' }}>Owner</th><th style={{ padding: '0.75rem' }}>Message</th><th style={{ padding: '0.75rem' }}>Requested</th><th style={{ padding: '0.75rem' }}>Status</th><th style={{ padding: '0.75rem', textAlign: 'right' }}>Actions</th></tr></thead><tbody>{callbacks.map(request => { const status = String(request.status || 'PENDING').toUpperCase(); return <tr key={request.id} style={{ borderBottom: '1px solid #e2e8f0' }}><td style={{ padding: '0.75rem', fontWeight: 600 }}>{request.owner?.name || `Owner #${request.owner?.id || '-'}`}</td><td style={{ padding: '0.75rem' }}>{request.note || '-'}</td><td style={{ padding: '0.75rem' }}>{request.createdAt ? new Date(request.createdAt).toLocaleString() : '-'}</td><td style={{ padding: '0.75rem' }}><span style={statusStyle(status)}>{status}</span></td><td style={{ padding: '0.75rem', textAlign: 'right' }}>{status === 'PENDING' && <span style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem' }}><button disabled={busyId === request.id} onClick={() => onStatusChange(request.id, 'ACCEPTED')} style={{ padding: '0.4rem 0.65rem', border: 0, borderRadius: '4px', color: '#fff', background: '#16a34a', cursor: 'pointer' }}>Accept</button><button disabled={busyId === request.id} onClick={() => onStatusChange(request.id, 'REJECTED')} style={{ padding: '0.4rem 0.65rem', border: 0, borderRadius: '4px', color: '#fff', background: '#dc2626', cursor: 'pointer' }}>Reject</button></span>}{status === 'ACCEPTED' && <button disabled={busyId === request.id} onClick={() => onStatusChange(request.id, 'COMPLETED')} style={{ padding: '0.4rem 0.65rem', border: 0, borderRadius: '4px', color: '#fff', background: '#2563eb', cursor: 'pointer' }}>Complete</button>}</td></tr>; })}</tbody></table></div>;
 };
 
 export default AgencyView;

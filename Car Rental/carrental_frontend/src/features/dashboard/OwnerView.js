@@ -6,12 +6,23 @@ import Button from '../../components/ui/Button';
 import Spinner from '../../components/feedback/Spinner';
 import { ownerApi } from '../auth/api/ownerApi';
 
+const getRequestErrorMessage = (error, fallback) => {
+    const responseData = error.response?.data;
+    if (typeof responseData === 'string' && responseData.trim()) return responseData;
+    if (responseData?.message) return responseData.message;
+    if (responseData?.error) return responseData.error;
+    return `${fallback}${error.response?.status ? ` (${error.response.status})` : '.'}`;
+};
+
 const OwnerView = () => {
-    const [activeTab, setActiveTab] = useState('VEHICLES'); // 'VEHICLES' | 'BIDS' | 'CALLBACKS'
+    const [activeTab, setActiveTab] = useState('VEHICLES'); // 'VEHICLES' | 'BIDS' | 'PROFILE'
     const [myVehicles, setMyVehicles] = useState([]);
     const [agencies, setAgencies] = useState([]);
     const [myBids, setMyBids] = useState([]);
-    const [callbacks, setCallbacks] = useState([]);
+    const [profile, setProfile] = useState(null);
+    const [profileForm, setProfileForm] = useState({ name: '' });
+    const [profileImage, setProfileImage] = useState(null);
+    const [savingProfile, setSavingProfile] = useState(false);
     
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -20,28 +31,32 @@ const OwnerView = () => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingVehicle, setEditingVehicle] = useState(null);
 
-    // Bid & Callback Form States
+    // Bid form state
     const [selectedVehicleForBid, setSelectedVehicleForBid] = useState('');
     const [selectedAgencyForBid, setSelectedAgencyForBid] = useState('');
     const [bidAmount, setBidAmount] = useState('');
 
-    const [callbackAgency, setCallbackAgency] = useState('');
-    const [callbackNote, setCallbackNote] = useState('');
-
     const fetchOwnerData = async () => {
         setLoading(true);
         setError('');
-        const vehiclesResult = await Promise.allSettled([fleetApi.getMyVehicles()]);
-        const vehicles = vehiclesResult[0];
+        const [vehiclesResult, agenciesResult, profileResult] = await Promise.allSettled([
+            fleetApi.getMyVehicles(),
+            ownerApi.getAgencies(),
+            ownerApi.getProfile(),
+        ]);
+        const vehicles = vehiclesResult;
         const vehicleList = vehicles.status === 'fulfilled' ? vehicles.value || [] : [];
         const bidResults = await Promise.allSettled(vehicleList.map(vehicle => ownerApi.getBidsByCar(vehicle.id)));
 
         if (vehicles.status === 'fulfilled') setMyVehicles(vehicles.value || []);
+        if (agenciesResult.status === 'fulfilled') setAgencies(agenciesResult.value || []);
+        if (profileResult.status === 'fulfilled') {
+            setProfile(profileResult.value || null);
+            setProfileForm({ name: profileResult.value?.name || '' });
+        }
         setMyBids(bidResults.filter(result => result.status === 'fulfilled').flatMap(result => result.value || []));
-        setAgencies([]);
-        setCallbacks([]);
 
-        const failedRequests = [vehicles, ...bidResults].filter(result => result.status === 'rejected');
+        const failedRequests = [vehicles, agenciesResult, profileResult, ...bidResults].filter(result => result.status === 'rejected');
         if (failedRequests.length > 0) {
             console.error('Some owner dashboard requests failed:', failedRequests);
             setError(`${failedRequests.length} dashboard service${failedRequests.length > 1 ? 's' : ''} unavailable. Try again.`);
@@ -60,7 +75,7 @@ const OwnerView = () => {
             setIsAddModalOpen(false);
             fetchOwnerData();
         } catch (err) {
-            alert('Failed to host new vehicle.');
+            alert(getRequestErrorMessage(err, 'Failed to host new vehicle'));
         }
     };
 
@@ -70,7 +85,7 @@ const OwnerView = () => {
             setEditingVehicle(null);
             fetchOwnerData();
         } catch (err) {
-            alert('Failed to update vehicle details.');
+            alert(getRequestErrorMessage(err, 'Failed to update vehicle details'));
         }
     };
 
@@ -117,14 +132,23 @@ const OwnerView = () => {
         }
     };
 
-    // Callback Request Submission
-    const handleRequestCallback = async (e) => {
+    const handleProfileChange = (e) => {
+        setProfileForm(current => ({ ...current, [e.target.name]: e.target.value }));
+    };
+
+    const handleUpdateProfile = async (e) => {
         e.preventDefault();
-        if (!callbackAgency) {
-            alert('Please select an agency.');
-            return;
+        setSavingProfile(true);
+        try {
+            const updated = await ownerApi.updateProfile({ ...profile, name: profileForm.name.trim() }, profileImage);
+            setProfile(updated);
+            setProfileImage(null);
+            alert('Profile updated successfully.');
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to update profile.');
+        } finally {
+            setSavingProfile(false);
         }
-        alert('Callback requests are not available in the supplied owner controller.');
     };
 
     if (loading) return <Spinner size="lg" />;
@@ -181,7 +205,7 @@ const OwnerView = () => {
                 {[
                     { id: 'VEHICLES', label: `My Hosted Fleet (${myVehicles.length})` },
                     { id: 'BIDS', label: `Agency Bids (${myBids.length})` },
-                    { id: 'CALLBACKS', label: 'Agency Callbacks' }
+                    { id: 'PROFILE', label: 'My Profile' }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -351,94 +375,22 @@ const OwnerView = () => {
                 </div>
             )}
 
-            {/* TAB 3: CALLBACK REQUESTS */}
-            {activeTab === 'CALLBACKS' && (
-                <div className="dashboard-workspace" style={{ display: 'grid', gridTemplateColumns: '320px minmax(0, 1fr)', gap: '1.5rem', alignItems: 'start' }}>
-                    {/* Form: Request Callback */}
-                    <form onSubmit={handleRequestCallback} className="dashboard-surface" style={{ backgroundColor: '#ffffff', padding: '1.25rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                        <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Request Agency Callback</h4>
-                        
-                        <div style={{ marginBottom: '1rem' }}>
-                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Select Agency</label>
-                            <select
-                                value={callbackAgency}
-                                onChange={(e) => setCallbackAgency(e.target.value)}
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.875rem' }}
-                            >
-                                <option value="">Choose agency</option>
-                                {agencies.map(a => (
-                                    <option key={a.id} value={a.id}>{a.name || a.agencyName || `Agency #${a.id}`}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div style={{ marginBottom: '1rem' }}>
-                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Message / Notes</label>
-                            <textarea
-                                rows="3"
-                                placeholder="State reason for callback request..."
-                                value={callbackNote}
-                                onChange={(e) => setCallbackNote(e.target.value)}
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.875rem', fontFamily: 'inherit' }}
-                            />
-                        </div>
-
-                        <Button type="submit" variant="primary" style={{ width: '100%' }}>Send Callback Request</Button>
-                    </form>
-
-                    {/* Callback Request Log */}
-                    <div className="dashboard-surface" style={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0' }}>
-                            <h4 style={{ margin: 0, color: '#0f172a' }}>Callback Request History</h4>
-                        </div>
-                        <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                                <thead>
-                                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569', textTransform: 'uppercase' }}>Req ID</th>
-                                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569', textTransform: 'uppercase' }}>Agency</th>
-                                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569', textTransform: 'uppercase' }}>Note</th>
-                                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569', textTransform: 'uppercase' }}>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {callbacks.length === 0 ? (
-                                        <tr>
-                                            <td colSpan="4" style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>
-                                                No callback requests made.
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        callbacks.map(c => (
-                                            <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#334155', fontWeight: '500' }}>#{c.id}</td>
-                                                <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#334155' }}>
-                                                    {c.agency ? (c.agency.name || c.agency.agencyName || `Agency #${c.agency.id}`) : `Agency #${c.agencyId || 'N/A'}`}
-                                                </td>
-                                                <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#64748b', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {c.note || 'N/A'}
-                                                </td>
-                                                <td style={{ padding: '0.75rem 1rem' }}>
-                                                    <span style={{
-                                                        padding: '0.25rem 0.6rem',
-                                                        borderRadius: '9999px',
-                                                        fontSize: '0.75rem',
-                                                        fontWeight: '600',
-                                                        display: 'inline-block',
-                                                        backgroundColor: c.status === 'COMPLETED' ? '#dcfce7' : c.status === 'CANCELLED' ? '#fee2e2' : '#fef3c7',
-                                                        color: c.status === 'COMPLETED' ? '#15803d' : c.status === 'CANCELLED' ? '#b91c1c' : '#b45309'
-                                                    }}>
-                                                        {c.status}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
+            {/* TAB 3: PROFILE */}
+            {activeTab === 'PROFILE' && (
+                <form onSubmit={handleUpdateProfile} className="dashboard-surface" style={{ maxWidth: '620px', backgroundColor: '#ffffff', padding: '1.5rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <h4 style={{ margin: '0 0 0.35rem', color: '#0f172a' }}>Owner Profile</h4>
+                    <p style={{ margin: '0 0 1.25rem', color: '#64748b', fontSize: '0.875rem' }}>Update the name and profile image associated with your owner account.</p>
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label htmlFor="owner-name" style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Name</label>
+                        <input id="owner-name" name="name" value={profileForm.name} onChange={handleProfileChange} required style={{ width: '100%', boxSizing: 'border-box', padding: '0.65rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} />
                     </div>
-                </div>
+                    <div style={{ marginBottom: '1.25rem' }}>
+                        <label htmlFor="owner-image" style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Profile image</label>
+                        <input id="owner-image" type="file" accept="image/*" onChange={(e) => setProfileImage(e.target.files?.[0] || null)} />
+                    </div>
+                    {profile?.email && <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Email: {profile.email}</p>}
+                    <Button type="submit" variant="primary" isLoading={savingProfile}>Save Profile</Button>
+                </form>
             )}
 
             {/* Modal for Registering / Editing Vehicles */}
