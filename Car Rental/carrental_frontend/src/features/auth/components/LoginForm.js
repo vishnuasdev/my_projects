@@ -20,7 +20,8 @@ const LoginForm = () => {
         setIsLoading(true);
 
         try {
-            const user = await login(formData);
+            const loginResult = await login(formData);
+            const user = loginResult.user || loginResult;
 
             // Double check status before navigating
             const currentStatus = user.status ? user.status.toUpperCase() : '';
@@ -49,7 +50,7 @@ const LoginForm = () => {
                 });
             } else {
                 setStatusError({
-                    message: 'Unable to connect to the server. Please try again.',
+                    message: err.message || 'Unable to connect to the server. Please try again.',
                     status: ''
                 });
             }

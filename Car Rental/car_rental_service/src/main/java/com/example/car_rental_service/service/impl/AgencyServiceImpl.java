@@ -330,7 +330,9 @@ public class AgencyServiceImpl implements AgencyService {
         if (booking.getCar() != null) {
             if (status == BookingStatus.CONFIRMED) {
                 booking.getCar().setAvailable(false);
-            } else if (status == BookingStatus.CANCELLED || status == BookingStatus.COMPLETED) {
+            } else if (status == BookingStatus.CANCELLED
+                    || status == BookingStatus.REJECTED
+                    || status == BookingStatus.COMPLETED) {
                 booking.getCar().setAvailable(true);
             }
         }

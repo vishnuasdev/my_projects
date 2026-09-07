@@ -24,7 +24,7 @@ public class CustomUserDetailsService implements UserDetailsService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
-        // Matches hasAuthority("ADMIN"), hasAuthority("CUSTOMER"), etc.
+        // Direct Enum authority string (ADMIN, AGENCY, CUSTOMER, OWNER)
         return new org.springframework.security.core.userdetails.User(
                 user.getEmail(),
                 user.getPassword(),

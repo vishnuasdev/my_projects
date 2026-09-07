@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { fleetApi } from '../fleet/api/fleetApi';
 import VehicleCard from '../fleet/components/VehicleCard';
 import VehicleModal from '../fleet/components/VehicleModal';
@@ -26,6 +26,7 @@ const OwnerView = () => {
     
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [actionMessage, setActionMessage] = useState({ type: '', text: '' });
     
     // Modal Management
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -34,101 +35,203 @@ const OwnerView = () => {
     // Bid form state
     const [selectedVehicleForBid, setSelectedVehicleForBid] = useState('');
     const [selectedAgencyForBid, setSelectedAgencyForBid] = useState('');
+    const [agencySearch, setAgencySearch] = useState('');
+    const [bidToAllAgencies, setBidToAllAgencies] = useState(false);
     const [bidAmount, setBidAmount] = useState('');
+    const [submittingBid, setSubmittingBid] = useState(false);
 
-    const fetchOwnerData = async () => {
+    const showNotification = (type, text) => {
+        setActionMessage({ type, text });
+        setTimeout(() => setActionMessage({ type: '', text: '' }), 5000);
+    };
+
+    const fetchOwnerData = useCallback(async () => {
         setLoading(true);
         setError('');
-        const [vehiclesResult, agenciesResult, profileResult] = await Promise.allSettled([
-            fleetApi.getMyVehicles(),
-            ownerApi.getAgencies(),
-            ownerApi.getProfile(),
-        ]);
-        const vehicles = vehiclesResult;
-        const vehicleList = vehicles.status === 'fulfilled' ? vehicles.value || [] : [];
-        const bidResults = await Promise.allSettled(vehicleList.map(vehicle => ownerApi.getBidsByCar(vehicle.id)));
+        try {
+            const [vehiclesResult, agenciesResult, profileResult] = await Promise.allSettled([
+                fleetApi.getMyVehicles(),
+                ownerApi.getAgencies(),
+                ownerApi.getProfile(),
+            ]);
 
-        if (vehicles.status === 'fulfilled') setMyVehicles(vehicles.value || []);
-        if (agenciesResult.status === 'fulfilled') setAgencies(agenciesResult.value || []);
-        if (profileResult.status === 'fulfilled') {
-            setProfile(profileResult.value || null);
-            setProfileForm({ name: profileResult.value?.name || '' });
-        }
-        setMyBids(bidResults.filter(result => result.status === 'fulfilled').flatMap(result => result.value || []));
+            const vehicleList = vehiclesResult.status === 'fulfilled' ? (vehiclesResult.value || []) : [];
+            if (vehiclesResult.status === 'fulfilled') setMyVehicles(vehicleList);
+            if (agenciesResult.status === 'fulfilled') setAgencies(agenciesResult.value || []);
+            if (profileResult.status === 'fulfilled') {
+                setProfile(profileResult.value || null);
+                setProfileForm({ name: profileResult.value?.name || '' });
+            }
 
-        const failedRequests = [vehicles, agenciesResult, profileResult, ...bidResults].filter(result => result.status === 'rejected');
-        if (failedRequests.length > 0) {
-            console.error('Some owner dashboard requests failed:', failedRequests);
-            setError(`${failedRequests.length} dashboard service${failedRequests.length > 1 ? 's' : ''} unavailable. Try again.`);
+            // Fetch bids using single endpoint if available, or fall back safely without triggering auth ejects
+            try {
+                if (ownerApi.getMyBids) {
+                    const bids = await ownerApi.getMyBids();
+                    setMyBids(bids || []);
+                } else {
+                    const bidResults = await Promise.allSettled(
+                        vehicleList.map(vehicle => ownerApi.getBidsByCar(vehicle.id))
+                    );
+                    setMyBids(bidResults.filter(r => r.status === 'fulfilled').flatMap(r => r.value || []));
+                }
+            } catch (bidErr) {
+                console.warn('Could not fetch bids directly:', bidErr);
+            }
+
+            const failedCount = [vehiclesResult, agenciesResult, profileResult].filter(r => r.status === 'rejected').length;
+            if (failedCount > 0) {
+                setError(`${failedCount} dashboard component(s) temporarily unavailable. Operating in persistent mode.`);
+            }
+        } catch (err) {
+            console.error('Data fetch handled in-place:', err);
+            setError('Unable to refresh all records. Session remains active.');
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-    };
+    }, []);
 
     useEffect(() => {
         fetchOwnerData();
-    }, []);
+    }, [fetchOwnerData]);
 
-    // Vehicle Handlers
+    // Vehicle Handlers - In-place operations
     const handleAddVehicle = async (vehicleData, images) => {
         try {
-            await fleetApi.createVehicle(vehicleData, images);
+            const created = await fleetApi.createVehicle(vehicleData, images);
             setIsAddModalOpen(false);
-            fetchOwnerData();
+            if (created) {
+                setMyVehicles(prev => [...prev, created]);
+            } else {
+                await fetchOwnerData();
+            }
+            showNotification('success', 'Vehicle hosted successfully.');
         } catch (err) {
-            alert(getRequestErrorMessage(err, 'Failed to host new vehicle'));
+            showNotification('error', getRequestErrorMessage(err, 'Failed to host new vehicle'));
+            throw err;
         }
     };
 
     const handleUpdateVehicle = async (vehicleData, images) => {
         try {
-            await fleetApi.updateVehicle(editingVehicle.id, vehicleData, images);
+            const updated = await fleetApi.updateVehicle(editingVehicle.id, vehicleData, images);
             setEditingVehicle(null);
-            fetchOwnerData();
+            if (updated) {
+                setMyVehicles(prev => prev.map(v => v.id === updated.id ? updated : v));
+            } else {
+                await fetchOwnerData();
+            }
+            showNotification('success', 'Vehicle details updated successfully.');
         } catch (err) {
-            alert(getRequestErrorMessage(err, 'Failed to update vehicle details'));
+            showNotification('error', getRequestErrorMessage(err, 'Failed to update vehicle details'));
+            throw err;
         }
     };
 
     const handleToggleAvailability = async (vehicle) => {
+        const nextState = !vehicle.isAvailable;
+        // Optimistic UI Update
+        setMyVehicles(prev => prev.map(v => v.id === vehicle.id ? { ...v, isAvailable: nextState } : v));
         try {
-            await fleetApi.toggleAvailability(vehicle.id, !vehicle.isAvailable);
-            fetchOwnerData();
+            await fleetApi.toggleAvailability(vehicle.id, nextState);
+            showNotification('success', `Vehicle is now ${nextState ? 'Available' : 'Unavailable'}.`);
         } catch (err) {
-            alert('Failed to update vehicle availability.');
+            // Revert state on error without route loss
+            setMyVehicles(prev => prev.map(v => v.id === vehicle.id ? { ...v, isAvailable: vehicle.isAvailable } : v));
+            showNotification('error', 'Failed to update vehicle availability.');
         }
     };
 
     const handleDeleteVehicle = async (vehicleId) => {
-        if (!window.confirm('Delete this vehicle?')) return;
+        if (!window.confirm('Delete this vehicle from your fleet?')) return;
         try {
             await fleetApi.deleteVehicle(vehicleId);
-            fetchOwnerData();
+            setMyVehicles(prev => prev.filter(v => v.id !== vehicleId));
+            showNotification('success', 'Vehicle removed from your fleet.');
         } catch (err) {
-            alert('Failed to delete vehicle.');
+            showNotification('error', 'Failed to delete vehicle.');
+        }
+    };
+
+    const handleRecallVehicle = async (vehicle) => {
+        if (!window.confirm('Recall this vehicle from the assigned agency?')) return;
+        try {
+            const recalledVehicle = await ownerApi.recallCar(vehicle.id);
+            setMyVehicles(prev => prev.map(current => current.id === vehicle.id
+                ? (recalledVehicle || { ...current, agency: null, agencyId: null })
+                : current));
+            showNotification('success', 'Vehicle recalled from the agency.');
+        } catch (err) {
+            showNotification('error', getRequestErrorMessage(err, 'Failed to recall vehicle'));
+        }
+    };
+
+    const handleCancelBid = async (bidId) => {
+        if (!window.confirm('Cancel this pending bid?')) return;
+        try {
+            await ownerApi.cancelBid(bidId);
+            setMyBids(prev => prev.map(bid => bid.id === bidId ? { ...bid, status: 'CANCELLED' } : bid));
+            showNotification('success', 'Bid cancelled.');
+        } catch (err) {
+            showNotification('error', getRequestErrorMessage(err, 'Failed to cancel bid'));
         }
     };
 
     // Marketplace Bid Submission
     const handlePlaceBid = async (e) => {
         e.preventDefault();
-        if (!selectedVehicleForBid || !selectedAgencyForBid || !bidAmount) {
-            alert('Please complete all bid parameters.');
+        if (!selectedVehicleForBid || !bidAmount) {
+            showNotification('error', 'Please select a vehicle and enter a daily rate.');
             return;
         }
+        if (!bidToAllAgencies && !selectedAgencyForBid) {
+            showNotification('error', 'Please select an agency or choose all agencies.');
+            return;
+        }
+        if (bidToAllAgencies && agencies.length === 0) {
+            showNotification('error', 'No agencies are available for bidding.');
+            return;
+        }
+        setSubmittingBid(true);
         try {
-            await ownerApi.placeBid({
-                carId: selectedVehicleForBid,
-                agencyId: selectedAgencyForBid,
-                ratePerDay: parseFloat(bidAmount),
-                status: 'PENDING'
-            });
-            alert('Bid submitted successfully to the selected agency!');
+            const targetAgencyIds = bidToAllAgencies
+                ? agencies.map(agency => agency.id).filter(Boolean)
+                : [selectedAgencyForBid];
+            const bidResults = await Promise.allSettled(
+                targetAgencyIds.map(agencyId => ownerApi.placeBid({
+                    carId: selectedVehicleForBid,
+                    agencyId,
+                    ratePerDay: parseFloat(bidAmount),
+                    status: 'PENDING'
+                }))
+            );
+            const successfulBids = bidResults
+                .filter(result => result.status === 'fulfilled' && result.value)
+                .map(result => result.value);
+            const failedCount = bidResults.filter(result => result.status === 'rejected').length;
+
+            if (successfulBids.length > 0) {
+                setMyBids(prev => [...successfulBids.reverse(), ...prev]);
+            } else {
+                await fetchOwnerData();
+            }
+            if (failedCount > 0 && successfulBids.length > 0) {
+                showNotification('error', `${successfulBids.length} bid(s) submitted, but ${failedCount} failed.`);
+            } else if (successfulBids.length > 0) {
+                showNotification('success', bidToAllAgencies
+                    ? `Bid submitted successfully to all ${successfulBids.length} agencies.`
+                    : 'Bid submitted successfully to the agency!');
+            } else {
+                showNotification('error', 'The bid could not be submitted to any selected agency.');
+            }
             setBidAmount('');
             setSelectedVehicleForBid('');
             setSelectedAgencyForBid('');
-            fetchOwnerData();
+            setAgencySearch('');
+            setBidToAllAgencies(false);
         } catch (err) {
-            alert('Failed to submit bid.');
+            showNotification('error', getRequestErrorMessage(err, 'Failed to submit bid.'));
+        } finally {
+            setSubmittingBid(false);
         }
     };
 
@@ -143,9 +246,9 @@ const OwnerView = () => {
             const updated = await ownerApi.updateProfile({ ...profile, name: profileForm.name.trim() }, profileImage);
             setProfile(updated);
             setProfileImage(null);
-            alert('Profile updated successfully.');
+            showNotification('success', 'Profile updated successfully.');
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to update profile.');
+            showNotification('error', getRequestErrorMessage(err, 'Failed to update profile.'));
         } finally {
             setSavingProfile(false);
         }
@@ -154,6 +257,12 @@ const OwnerView = () => {
     if (loading) return <Spinner size="lg" />;
 
     const acceptedBids = myBids.filter(b => b.status === 'ACCEPTED');
+    const normalizedAgencySearch = agencySearch.trim().toLowerCase();
+    const filteredAgencies = agencies.filter(agency => {
+        const name = agency.name || agency.agencyName || agency.companyName || '';
+        const email = agency.email || agency.user?.email || '';
+        return `${name} ${email} ${agency.id}`.toLowerCase().includes(normalizedAgencySearch);
+    });
 
     return (
         <div className="owner-dashboard" style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem 4rem', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -167,26 +276,54 @@ const OwnerView = () => {
                 .owner-dashboard .dashboard-tab { white-space: nowrap; }
                 .owner-dashboard .dashboard-surface { box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04); }
                 .owner-dashboard .dashboard-workspace { grid-template-columns: 320px minmax(0, 1fr) !important; }
+                .owner-dashboard .owner-vehicle-grid {
+                    grid-template-columns: repeat(auto-fill, minmax(260px, 320px)) !important;
+                    justify-content: start;
+                    align-items: start;
+                }
+                .owner-dashboard .owner-vehicle-actions { flex-wrap: wrap; }
                 @media (max-width: 700px) {
                     .owner-dashboard { padding: 1.25rem 1rem 3rem !important; }
                     .owner-dashboard .dashboard-header { align-items: flex-start !important; flex-direction: column; }
                     .owner-dashboard .dashboard-header button { width: 100%; }
                     .owner-dashboard .dashboard-error { align-items: flex-start; flex-direction: column; }
                     .owner-dashboard .dashboard-workspace { grid-template-columns: 1fr !important; }
+                    .owner-dashboard .owner-vehicle-grid { grid-template-columns: minmax(0, 1fr) !important; }
                 }
             `}</style>
+
             {/* Header Area */}
             <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.75rem' }}>
                 <div>
                     <h2 className="dashboard-heading" style={{ margin: 0, color: '#0f172a' }}>Vehicle Owner Dashboard</h2>
                     <p style={{ color: '#64748b', margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>
-                        Manage hosted vehicles, handle agency bids, and request support.
+                        Manage hosted vehicles, handle agency bids, and update your profile without interruption.
                     </p>
                 </div>
                 <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>+ Host a Vehicle</Button>
             </div>
 
-            {error && <div className="dashboard-error" style={{ padding: '0.8rem 1rem', backgroundColor: '#fff1f2', color: '#b91c1c', border: '1px solid #fecdd3', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.875rem' }}><span>{error}</span><button className="dashboard-retry" onClick={fetchOwnerData}>Retry</button></div>}
+            {/* In-App Action Notification Banner */}
+            {actionMessage.text && (
+                <div style={{
+                    padding: '0.8rem 1rem',
+                    borderRadius: '8px',
+                    marginBottom: '1rem',
+                    fontSize: '0.875rem',
+                    backgroundColor: actionMessage.type === 'error' ? '#fff1f2' : '#f0fdf4',
+                    color: actionMessage.type === 'error' ? '#b91c1c' : '#15803d',
+                    border: `1px solid ${actionMessage.type === 'error' ? '#fecdd3' : '#bbf7d0'}`
+                }}>
+                    {actionMessage.text}
+                </div>
+            )}
+
+            {error && (
+                <div className="dashboard-error" style={{ padding: '0.8rem 1rem', backgroundColor: '#fff1f2', color: '#b91c1c', border: '1px solid #fecdd3', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.875rem' }}>
+                    <span>{error}</span>
+                    <button className="dashboard-retry" onClick={fetchOwnerData}>Retry</button>
+                </div>
+            )}
 
             {/* Status Notifications Panel */}
             {acceptedBids.length > 0 && (
@@ -209,6 +346,7 @@ const OwnerView = () => {
                 ].map(tab => (
                     <button
                         key={tab.id}
+                        type="button"
                         onClick={() => setActiveTab(tab.id)}
                         className="dashboard-tab"
                         style={{
@@ -236,29 +374,41 @@ const OwnerView = () => {
                             <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>Host Your First Vehicle</Button>
                         </div>
                     ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                        <div className="owner-vehicle-grid" style={{ display: 'grid', gap: '1.5rem' }}>
                             {myVehicles.map((vehicle) => (
                                 <div key={vehicle.id} className="dashboard-surface" style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#fff' }}>
                                     <VehicleCard car={vehicle} actionLabel="Owner Item" isOwner={true} />
-                                    <div style={{ padding: '0.75rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+                                    <div className="owner-vehicle-actions" style={{ padding: '0.75rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                                         <button
+                                            type="button"
                                             onClick={() => setEditingVehicle(vehicle)}
                                             style={{ padding: '0.35rem 0.75rem', backgroundColor: '#dbeafe', color: '#1d4ed8', border: 'none', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer' }}
                                         >
-                                            Edit Vehicle Info
+                                            Edit Info
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={() => handleToggleAvailability(vehicle)}
-                                            style={{ marginLeft: '0.5rem', padding: '0.35rem 0.75rem', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer' }}
+                                            style={{ padding: '0.35rem 0.75rem', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer' }}
                                         >
                                             {vehicle.isAvailable ? 'Mark Unavailable' : 'Make Available'}
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={() => handleDeleteVehicle(vehicle.id)}
-                                            style={{ marginLeft: '0.5rem', padding: '0.35rem 0.75rem', backgroundColor: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer' }}
+                                            style={{ padding: '0.35rem 0.75rem', backgroundColor: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer' }}
                                         >
                                             Delete
                                         </button>
+                                        {(vehicle.agencyId || vehicle.agency?.id) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRecallVehicle(vehicle)}
+                                                style={{ padding: '0.35rem 0.75rem', backgroundColor: '#fef3c7', color: '#92400e', border: 'none', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer' }}
+                                            >
+                                                Recall
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -289,17 +439,74 @@ const OwnerView = () => {
                         </div>
 
                         <div style={{ marginBottom: '1rem' }}>
-                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Target Agency</label>
-                            <select
-                                value={selectedAgencyForBid}
-                                onChange={(e) => setSelectedAgencyForBid(e.target.value)}
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.875rem' }}
-                            >
-                                <option value="">Select agency</option>
-                                {agencies.map(a => (
-                                    <option key={a.id} value={a.id}>{a.name || a.agencyName || `Agency #${a.id}`}</option>
-                                ))}
-                            </select>
+                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.5rem' }}>
+                                Target Agencies
+                            </label>
+                            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.65rem', fontSize: '0.8rem' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                                    <input
+                                        type="radio"
+                                        name="bidTarget"
+                                        checked={!bidToAllAgencies}
+                                        onChange={() => setBidToAllAgencies(false)}
+                                    />
+                                    One agency
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                                    <input
+                                        type="radio"
+                                        name="bidTarget"
+                                        checked={bidToAllAgencies}
+                                        onChange={() => {
+                                            setBidToAllAgencies(true);
+                                            setSelectedAgencyForBid('');
+                                        }}
+                                    />
+                                    All agencies ({agencies.length})
+                                </label>
+                            </div>
+                            {!bidToAllAgencies && (
+                                <>
+                                    <input
+                                        type="search"
+                                        value={agencySearch}
+                                        onChange={(e) => setAgencySearch(e.target.value)}
+                                        placeholder="Search agencies by name, email, or ID"
+                                        aria-label="Search agencies"
+                                        style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.875rem', marginBottom: '0.5rem', boxSizing: 'border-box' }}
+                                    />
+                                    <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid #cbd5e1', borderRadius: '4px', backgroundColor: '#fff' }}>
+                                        {filteredAgencies.length === 0 ? (
+                                            <p style={{ margin: 0, padding: '0.75rem', color: '#64748b', fontSize: '0.8rem' }}>
+                                                {agencies.length === 0 ? 'No agencies available.' : 'No agencies match your search.'}
+                                            </p>
+                                        ) : filteredAgencies.map(agency => {
+                                            const agencyName = agency.name || agency.agencyName || agency.companyName || `Agency #${agency.id}`;
+                                            const agencyEmail = agency.email || agency.user?.email;
+                                            return (
+                                                <label key={agency.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.65rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
+                                                    <input
+                                                        type="radio"
+                                                        name="selectedAgency"
+                                                        value={agency.id}
+                                                        checked={String(selectedAgencyForBid) === String(agency.id)}
+                                                        onChange={() => setSelectedAgencyForBid(agency.id)}
+                                                    />
+                                                    <span style={{ minWidth: 0 }}>
+                                                        <strong style={{ display: 'block', fontSize: '0.8rem', color: '#0f172a' }}>{agencyName}</strong>
+                                                        <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{agencyEmail || `Agency #${agency.id}`}</span>
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
+                            {bidToAllAgencies && (
+                                <p style={{ margin: 0, padding: '0.65rem', color: '#1d4ed8', backgroundColor: '#eff6ff', borderRadius: '4px', fontSize: '0.8rem' }}>
+                                    The same bid will be sent to all {agencies.length} listed agencies.
+                                </p>
+                            )}
                         </div>
 
                         <div style={{ marginBottom: '1rem' }}>
@@ -313,7 +520,7 @@ const OwnerView = () => {
                             />
                         </div>
 
-                        <Button type="submit" variant="primary" style={{ width: '100%' }}>Submit Bid</Button>
+                        <Button type="submit" variant="primary" isLoading={submittingBid} style={{ width: '100%' }}>Submit Bid</Button>
                     </form>
 
                     {/* Table: My Bids Status */}
@@ -364,6 +571,15 @@ const OwnerView = () => {
                                                     }}>
                                                         {b.status}
                                                     </span>
+                                                    {String(b.status).toUpperCase() === 'PENDING' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleCancelBid(b.id)}
+                                                            style={{ marginLeft: '0.5rem', padding: '0.25rem 0.5rem', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#fff', color: '#475569', fontSize: '0.75rem', cursor: 'pointer' }}
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))
@@ -388,7 +604,7 @@ const OwnerView = () => {
                         <label htmlFor="owner-image" style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Profile image</label>
                         <input id="owner-image" type="file" accept="image/*" onChange={(e) => setProfileImage(e.target.files?.[0] || null)} />
                     </div>
-                    {profile?.email && <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Email: {profile.email}</p>}
+                    {profile?.email && <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.25rem' }}>Email: {profile.email}</p>}
                     <Button type="submit" variant="primary" isLoading={savingProfile}>Save Profile</Button>
                 </form>
             )}

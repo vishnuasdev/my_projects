@@ -1,5 +1,5 @@
 package com.example.car_rental_service.model.enums;
 
 public enum BookingStatus {
-    PENDING, CONFIRMED, COMPLETED, CANCELLED
+    PENDING, CONFIRMED, REJECTED, COMPLETED, CANCELLED
 }

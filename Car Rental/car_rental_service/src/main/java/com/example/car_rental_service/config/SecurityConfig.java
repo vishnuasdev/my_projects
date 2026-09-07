@@ -48,10 +48,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
 
-                        // 2. Public Car Browsing
-                        .requestMatchers(HttpMethod.GET, "/api/cars/**").permitAll()
+                        // 2. Public car catalog and images only (not owner/agency listings)
+                        .requestMatchers(HttpMethod.GET, "/api/cars/available").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/cars/*/image/*").permitAll()
 
                         // 3. Shared Operations
+                        .requestMatchers(HttpMethod.GET, "/api/cars/my-cars").hasAuthority("OWNER")
+                        .requestMatchers(HttpMethod.GET, "/api/cars/agency/**").hasAnyAuthority("AGENCY", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/cars/owner/**").hasAnyAuthority("OWNER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/cars/add", "/api/cars/create")
                         .hasAnyAuthority("ADMIN", "AGENCY", "OWNER")
                         .requestMatchers(HttpMethod.DELETE, "/api/cars/**")
@@ -75,7 +79,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
                         .requestMatchers("/api/agency/**").hasAuthority("AGENCY")
                         .requestMatchers("/api/owner/**").hasAuthority("OWNER")
-                        .requestMatchers("/api/customer/**").hasAuthority("CUSTOMER")
+                        .requestMatchers("/api/customers/admin/**").hasAuthority("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/customers").hasAuthority("ADMIN")
+                        .requestMatchers("/api/customers/**").hasAnyAuthority("CUSTOMER", "ADMIN")
 
                         // 5. Fallback Guard
                         .anyRequest().authenticated()

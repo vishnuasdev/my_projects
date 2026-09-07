@@ -31,11 +31,7 @@ const Router = () => {
                 {/* Public Home Page */}
                 <Route
                     path="/"
-                    element={
-                        <ProtectedRoute publicOnly>
-                            <PublicView />
-                        </ProtectedRoute>
-                    }
+                    element={<PublicView />}
                 />
 
                 {/* Public Auth Routes (Restricted for logged-in users) */}

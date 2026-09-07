@@ -3,6 +3,7 @@ package com.example.car_rental_service.model.entity;
 import com.example.car_rental_service.model.entity.users.Agency;
 import com.example.car_rental_service.model.entity.users.Customer;
 import com.example.car_rental_service.model.enums.BookingStatus;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
@@ -54,6 +55,7 @@ public class Booking {
     private Car car;
 
     @Transient
+    @JsonProperty("totalAmount")
     public Double getTotalCost() {
         if (ratePerDay != null && noOfDays != null) {
             return ratePerDay * noOfDays;

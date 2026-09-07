@@ -138,7 +138,7 @@ public class AgencyController {
         return ResponseEntity.ok(agencyService.getCustomerBookingsForAgency());
     }
 
-    // 5. Manage Customer Booking Request Status (APPROVED, REJECTED, COMPLETED)
+    // 5. Manage Customer Booking Request Status (CONFIRMED, REJECTED, COMPLETED)
     @PatchMapping("/bookings/{bookingId}/status")
     public ResponseEntity<Booking> updateBookingStatus(@PathVariable Long bookingId, @RequestParam BookingStatus status) {
         return ResponseEntity.ok(agencyService.updateBookingStatus(bookingId, status));
@@ -150,8 +150,8 @@ public class AgencyController {
         return ResponseEntity.ok(bookingService.getBookingsForAgencyCars());
     }
 
-    // Update bid status (e.g., ACCEPTED, REJECTED, CANCELED, WAITING)
-    @PatchMapping("/{id}/status")
+    // Update bid status (e.g., ACCEPTED, REJECTED, WAITING)
+    @PatchMapping("/bids/{id}/status")
     public ResponseEntity<Bid> updateBidStatus(@PathVariable Long id, @RequestParam String status) {
         return bidService.updateBidStatus(id, status)
                 .map(ResponseEntity::ok)
@@ -164,6 +164,4 @@ public class AgencyController {
         List<Bid> bids = bidService.getBidsByAgency(agencyId);
         return ResponseEntity.ok(bids);
     }
-
-
 }

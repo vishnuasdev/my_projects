@@ -2,7 +2,11 @@ import API from '../../../services/axiosInstance';
 
 export const bookingApi = {
     createBooking: async (bookingData) => {
-        const response = await API.post('/bookings/create', bookingData);
+        const carId = bookingData.carId || bookingData.car?.id;
+        const response = await API.post(`/customers/request/${carId}`, {
+            startDate: bookingData.startDate,
+            endDate: bookingData.endDate,
+        });
         return response.data;
     },
 

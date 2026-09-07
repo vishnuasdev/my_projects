@@ -50,8 +50,6 @@ const Navbar = () => {
     };
 
     // Check if car icon should be shown
-    // Show for: Public view (no user) OR Customer users
-    // Hide for: Agency, Owner, Admin
     const shouldShowCarIcon = () => {
         return !isInternalRole();
     };
@@ -76,13 +74,14 @@ const Navbar = () => {
     const handleLogout = () => {
         setDropdownOpen(false);
         logout();
-        // logout() already redirects to / in AuthProvider
     };
+
+    const homeDestination = user ? getDashboardPath() : '/';
 
     return (
         <nav style={{
             display: 'flex',
-            justify: 'space-between',
+            justifyContent: 'space-between',
             alignItems: 'center',
             padding: '1rem 2rem',
             backgroundColor: '#1e293b',
@@ -99,7 +98,9 @@ const Navbar = () => {
         }}>
             {/* Left Brand Logo */}
             <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
-                <Link to="/" style={{ color: '#ffffff', textDecoration: 'none' }}>CarRental System</Link>
+                <Link to={homeDestination} style={{ color: '#ffffff', textDecoration: 'none' }}>
+                    CarRental System
+                </Link>
             </div>
 
             {/* Right Action Items */}
@@ -107,7 +108,7 @@ const Navbar = () => {
                 {/* Vehicles Icon - Shows in public view and for CUSTOMER only */}
                 {shouldShowCarIcon() && (
                     <Link 
-                        to="/" 
+                        to={homeDestination} 
                         style={{ 
                             color: '#cbd5e1', 
                             textDecoration: 'none', 
@@ -149,7 +150,7 @@ const Navbar = () => {
                                     color: '#ffffff',
                                     display: 'flex',
                                     alignItems: 'center',
-                                    justify: 'center',
+                                    justifyContent: 'center',
                                     cursor: 'pointer',
                                     overflow: 'hidden',
                                     border: '2px solid #64748b',
@@ -209,8 +210,8 @@ const Navbar = () => {
                                             cursor: 'pointer',
                                             fontSize: '0.875rem'
                                         }}
-                                        onMouseEnter={(e) => e.target.style.backgroundColor = '#1e293b'}
-                                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1e293b'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                     >
                                         Profile
                                     </button>
@@ -227,8 +228,8 @@ const Navbar = () => {
                                             fontSize: '0.875rem',
                                             borderTop: '1px solid #334155'
                                         }}
-                                        onMouseEnter={(e) => e.target.style.backgroundColor = '#1e293b'}
-                                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1e293b'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                     >
                                         Logout
                                     </button>

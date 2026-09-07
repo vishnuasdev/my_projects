@@ -14,8 +14,8 @@ const ProtectedRoute = ({ allowedRoles, publicOnly = false, children }) => {
     );
   }
 
-  // Normalize role string to uppercase
-  const userRole = user?.role ? user.role.toUpperCase() : null;
+  // Normalize role string to uppercase (handles AGENCY, ADMIN, OWNER, CUSTOMER)
+  const userRole = user?.role ? String(user.role).toUpperCase() : null;
 
   // Map normalized roles to default dashboards
   const getDashboardPath = (role) => {
@@ -32,7 +32,7 @@ const ProtectedRoute = ({ allowedRoles, publicOnly = false, children }) => {
     }
   };
 
-  // 1. Logged-in user trying to access public-only routes (login/register)
+  // 1. Logged-in user trying to access public-only routes (e.g., /login or /register)
   if (publicOnly && user) {
     return <Navigate to={getDashboardPath(userRole)} replace />;
   }
@@ -42,9 +42,13 @@ const ProtectedRoute = ({ allowedRoles, publicOnly = false, children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  // 3. User logged in, but role is missing or not allowed
-  if (allowedRoles && userRole) {
-    const normalizedAllowedRoles = allowedRoles.map((r) => r.toUpperCase());
+  // 3. Authenticated user trying to access routes not allowed for their role
+  if (!publicOnly && allowedRoles) {
+    if (!userRole) {
+      return <Navigate to="/login" replace />;
+    }
+
+    const normalizedAllowedRoles = allowedRoles.map((r) => String(r).toUpperCase());
 
     if (!normalizedAllowedRoles.includes(userRole)) {
       return <Navigate to={getDashboardPath(userRole)} replace />;

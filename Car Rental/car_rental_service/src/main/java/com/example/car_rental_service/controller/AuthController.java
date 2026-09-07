@@ -13,12 +13,15 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
@@ -31,8 +34,10 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
 
-    public AuthController(UserService userService, UserMapper userMapper,
-                          AuthenticationManager authenticationManager, JwtUtil jwtUtil) {
+    public AuthController(UserService userService,
+                          UserMapper userMapper,
+                          AuthenticationManager authenticationManager,
+                          JwtUtil jwtUtil) {
         this.userService = userService;
         this.userMapper = userMapper;
         this.authenticationManager = authenticationManager;
@@ -43,26 +48,20 @@ public class AuthController {
     public ResponseEntity<UserResponse> registerUser(@Valid @RequestBody UserRegistrationRequest requestDto) {
         User user = userMapper.toEntity(requestDto);
         User savedUser = userService.registerUser(user);
-        return ResponseEntity.ok(userMapper.toResponseDto(savedUser));
+
+        // Correct HTTP status code for resource creation
+        return ResponseEntity.status(HttpStatus.CREATED).body(userMapper.toResponseDto(savedUser));
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
-        // 1. Authenticate user credentials first
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        loginRequest.getEmail(),
-                        loginRequest.getPassword()
-                )
-        );
-
-        // 2. Fetch user entity from database
+        // 1. Fetch user entity first to verify account status
         User user = userService.findByEmail(loginRequest.getEmail())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new UsernameNotFoundException("Invalid email or password"));
 
-        // 3. Block access if status is BLOCKED or SUSPENDED
+        // 2. Validate account status before authenticating credentials
         if (user.getStatus() != UserStatus.ACTIVE) {
-            String message = user.getStatus() == UserStatus.BLOCKED
+            String message = (user.getStatus() == UserStatus.BLOCKED)
                     ? "Your account has been blocked. Please contact system support."
                     : "Your account is temporarily suspended. Access is denied.";
 
@@ -72,13 +71,27 @@ public class AuthController {
             ));
         }
 
-        // 4. Set authentication context & generate token for ACTIVE users
+        // 3. Authenticate user credentials
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(
+                        loginRequest.getEmail(),
+                        loginRequest.getPassword()
+                )
+        );
+
+        // 4. Set authentication context
         SecurityContextHolder.getContext().setAuthentication(authentication);
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-        assert userDetails != null;
-        String jwt = jwtUtil.generateToken(userDetails, user.getRole().name());
+        // 5. Extract role cleanly from GrantedAuthorities
+        String role = userDetails.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .findFirst()
+                .orElse(user.getRole().name());
 
-        return ResponseEntity.ok(new JwtResponse(jwt, user.getEmail(), user.getRole().name(), user.getStatus().name()));
+        // 6. Generate token
+        String jwt = jwtUtil.generateToken(userDetails, role);
+
+        return ResponseEntity.ok(new JwtResponse(jwt, user.getEmail(), role, user.getStatus().name()));
     }
 }

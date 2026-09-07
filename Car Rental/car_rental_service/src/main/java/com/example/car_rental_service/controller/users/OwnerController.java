@@ -210,7 +210,7 @@ public class OwnerController {
     }
 
     @GetMapping("/agencies")
-    public ResponseEntity<List<Agency>> getApprovedAgencies() {
-        return ResponseEntity.ok(agencyService.getAgenciesByStatus(com.example.car_rental_service.model.enums.AgencyStatus.APPROVED));
+    public ResponseEntity<List<Agency>> getAgenciesForBidding() {
+        return ResponseEntity.ok(agencyService.getAllAgencies());
     }
 }

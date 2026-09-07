@@ -5,16 +5,18 @@ import { fetchProfileByRole, updateProfileByRole } from '../api/profileApi';
 import Spinner from '../../../components/feedback/Spinner';
 
 const ProfileView = () => {
-    const { user } = useAuth();
+    const { user, updateUser } = useAuth();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
+    const [loadError, setLoadError] = useState('');
     
     const [dbProfile, setDbProfile] = useState({});
     
     const [form, setForm] = useState({
         name: '',
+        phone: '',
         dob: '',
         licenseNo: '',
         location: '',
@@ -32,7 +34,8 @@ const ProfileView = () => {
     const rawRole = user?.role || user?.roles || '';
     const userRoles = Array.isArray(rawRole) ? rawRole : [rawRole];
     const userRole = String(userRoles[0] || 'USER').toUpperCase().replace('ROLE_', '');
-    const profileApiAvailable = ['OWNER', 'AGENCY'].includes(userRole);
+    const profileApiAvailable = ['OWNER', 'AGENCY', 'CUSTOMER'].includes(userRole);
+    const customerProfileIdAvailable = userRole !== 'CUSTOMER' || Boolean(user?.profileId || user?.customerId || user?.id);
 
     const getDashboardPath = () => {
         if (userRole === 'CUSTOMER') return '/customer/dashboard';
@@ -47,16 +50,23 @@ const ProfileView = () => {
     const fetchProfile = useCallback(async () => {
         try {
             setLoading(true);
-            if (!profileApiAvailable) {
+            setLoadError('');
+            if (!profileApiAvailable || !customerProfileIdAvailable) {
                 setDbProfile(user || {});
-                setForm(prev => ({ ...prev, name: user?.name || '', location: user?.location || '' }));
+                setForm(prev => ({
+                    ...prev,
+                    name: user?.name || user?.fullName || '',
+                    phone: user?.phone || user?.mobile || '',
+                    location: user?.location || ''
+                }));
                 return;
             }
-            const data = await fetchProfileByRole(userRole) || {};
-            
+            const data = await fetchProfileByRole(userRole, user) || {};
+
             setDbProfile(data);
             setForm({
                 name: data.name || data.agencyName || data.fullName || '',
+                phone: data.phone || data.mobile || data.contactNumber || '',
                 dob: data.dob || '',
                 licenseNo: data.licenseNo || '',
                 location: data.location || '',
@@ -72,10 +82,11 @@ const ProfileView = () => {
             });
         } catch (err) {
             console.error("Error fetching profile details:", err);
+            setLoadError(err.message || 'Unable to load profile details.');
         } finally {
             setLoading(false);
         }
-    }, [profileApiAvailable, user, userRole]);
+    }, [customerProfileIdAvailable, profileApiAvailable, user, userRole]);
 
     useEffect(() => {
         if (userRole) {
@@ -84,7 +95,7 @@ const ProfileView = () => {
     }, [userRole, fetchProfile]);
 
     const handleChange = (e) => {
-        if (!profileApiAvailable) return;
+        if (!profileApiAvailable || !customerProfileIdAvailable) return;
         const { name, value } = e.target;
         if (name.startsWith('addr_')) {
             const field = name.replace('addr_', '');
@@ -102,16 +113,28 @@ const ProfileView = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!profileApiAvailable) return;
+        if (!profileApiAvailable || !customerProfileIdAvailable) return;
+
         if (userRole === 'AGENCY' && (!form.name.trim() || !form.location.trim() || !form.address.street.trim() || !form.address.city.trim() || !form.address.state.trim())) {
             setSaveError('Agency name, location, street, city, and state are required.');
             return;
         }
+
+        if (userRole === 'CUSTOMER' && (!form.name.trim() || !form.licenseNo.trim() || !form.dob.trim())) {
+            setSaveError('Full name, Date of Birth, and Driving License Number are required.');
+            return;
+        }
+
         setSaving(true);
         setSaveError('');
         try {
-            const updatedData = await updateProfileByRole(userRole, form) || {};
+            const updatedData = await updateProfileByRole(userRole, form, user) || {};
             setDbProfile(updatedData);
+            updateUser({
+                ...updatedData,
+                name: updatedData.name || updatedData.agencyName || updatedData.fullName || form.name,
+                phone: updatedData.phone || updatedData.mobile || form.phone
+            });
             alert("Profile details saved successfully!");
         } catch (err) {
             console.error("Save error:", err);
@@ -127,7 +150,7 @@ const ProfileView = () => {
         const profileName = dbProfile.name || dbProfile.agencyName || dbProfile.fullName;
         
         if (!isLocked(dbProfile.location)) return false;
-        if (userRole === 'CUSTOMER' && (!isLocked(dbProfile.dob) || !isLocked(dbProfile.licenseNo))) return false;
+        if (userRole === 'CUSTOMER' && (!isLocked(profileName) || !isLocked(dbProfile.dob) || !isLocked(dbProfile.licenseNo))) return false;
         if (userRole === 'OWNER' && (!isLocked(profileName) || !isLocked(dbProfile.dob))) return false;
         if (userRole === 'AGENCY' && !isLocked(profileName)) return false;
         if (!isLocked(dbProfile.address?.doorNo) || !isLocked(dbProfile.address?.pincode)) return false;
@@ -392,8 +415,13 @@ const ProfileView = () => {
                             &times;
                         </button>
                     </div>
+                    {loadError && (
+                        <div role="alert" style={{ color: '#92400e', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+                            {loadError}
+                        </div>
+                    )}
                     <p className="notice-text">
-                        {profileApiAvailable
+                        {profileApiAvailable && customerProfileIdAvailable
                             ? (isFullyLocked()
                                 ? 'Details are saved to the database and locked for security.'
                                 : 'Details submitted to the database cannot be changed later.')
@@ -402,17 +430,22 @@ const ProfileView = () => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="profile-form">
-                    {saveError && <div role="alert" style={{ color: '#b91c1c', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.75rem 1rem' }}>{saveError}</div>}
+                    {saveError && (
+                        <div role="alert" style={{ color: '#b91c1c', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.75rem 1rem' }}>
+                            {saveError}
+                        </div>
+                    )}
                     <fieldset disabled={!profileApiAvailable} style={{ border: 0, padding: 0, margin: 0, display: 'contents' }}>
+
                     {/* Top Row: Email & Primary Location */}
                     <div className="grid-2">
                         <div className="field-group">
                             <label className="field-label">Account Email</label>
-                            <input 
-                                className="ui-input" 
-                                value={user?.email || ''} 
-                                disabled 
-                                readOnly 
+                            <input
+                                className="ui-input"
+                                value={user?.email || ''}
+                                disabled
+                                readOnly
                             />
                         </div>
 
@@ -421,7 +454,7 @@ const ProfileView = () => {
                                 Primary Location / City
                                 {isLocked(dbProfile.location) && <span className="lock-badge">🔒 Locked</span>}
                             </label>
-                            <input 
+                            <input
                                 className="ui-input"
                                 name="location"
                                 value={form.location}
@@ -432,25 +465,41 @@ const ProfileView = () => {
                         </div>
                     </div>
 
-                    {/* Middle Row: Name & DOB / License */}
+                    {/* Contact Number & Full Name Row */}
                     <div className="grid-2">
-                        {(userRole === 'OWNER' || userRole === 'AGENCY') && (
-                            <div className="field-group">
-                                <label className="field-label">
-                                    {userRole === 'AGENCY' ? 'Agency Name' : 'Full Name'}
-                                    {isLocked(dbProfile.name || dbProfile.agencyName) && <span className="lock-badge">🔒 Locked</span>}
-                                </label>
-                                <input 
-                                    className="ui-input"
-                                    name="name"
-                                    value={form.name}
-                                    onChange={handleChange}
-                                    disabled={isLocked(dbProfile.name || dbProfile.agencyName)}
-                                    placeholder="Enter full name"
-                                />
-                            </div>
-                        )}
+                        <div className="field-group">
+                            <label className="field-label">
+                                {userRole === 'AGENCY' ? 'Agency Name' : 'Full Name'}
+                                {isLocked(dbProfile.name || dbProfile.agencyName || dbProfile.fullName) && <span className="lock-badge">🔒 Locked</span>}
+                            </label>
+                            <input
+                                className="ui-input"
+                                name="name"
+                                value={form.name}
+                                onChange={handleChange}
+                                disabled={isLocked(dbProfile.name || dbProfile.agencyName || dbProfile.fullName)}
+                                placeholder={userRole === 'AGENCY' ? 'Enter agency name' : 'Enter full name'}
+                            />
+                        </div>
 
+                        <div className="field-group">
+                            <label className="field-label">
+                                Phone Number
+                                {isLocked(dbProfile.phone || dbProfile.mobile) && <span className="lock-badge">🔒 Locked</span>}
+                            </label>
+                            <input
+                                className="ui-input"
+                                name="phone"
+                                value={form.phone}
+                                onChange={handleChange}
+                                disabled={isLocked(dbProfile.phone || dbProfile.mobile)}
+                                placeholder="e.g. +91 9876543210"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Secondary Information: DOB & Driving License */}
+                    <div className="grid-2">
                         {(userRole === 'CUSTOMER' || userRole === 'OWNER') && (
                             <div className="field-group">
                                 <label className="field-label">
@@ -601,13 +650,14 @@ const ProfileView = () => {
                     </div>
 
                     </fieldset>
+
                     <div className="btn-row">
                         <button type="button" className="cancel-button" onClick={handleCancel}>
                             Cancel
                         </button>
                         {profileApiAvailable && !isFullyLocked() && (
                             <button type="submit" className="save-button" disabled={saving}>
-                                {saving ? 'Saving...' : 'Save Profile Details'}
+                                {saving ? 'Saving...' : 'Save Profile'}
                             </button>
                         )}
                     </div>

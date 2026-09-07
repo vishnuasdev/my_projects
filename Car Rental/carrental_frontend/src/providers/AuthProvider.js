@@ -1,14 +1,11 @@
-import React, { createContext, useState, useEffect } from 'react';
-
-// Relative path to tokenStorage (located in src/services/)
-import tokenStorage from '../services/tokenStorage'; 
-
-// Relative path to auth API functions (located in src/features/auth/api/authApi or services/)
-import { loginUser, registerUser } from '../features/auth/api/authApi'; 
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import tokenStorage from '../services/tokenStorage';
+import { loginUser, registerUser } from '../features/auth/api/authApi';
 
 export const AuthContext = createContext(null);
 
 const normalizeRole = (userInfo) => {
+  if (!userInfo) return null;
   const rawRole = userInfo.role || userInfo.roles;
   const role = Array.isArray(rawRole) ? rawRole[0] : rawRole;
 
@@ -22,60 +19,60 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 1. Re-hydrate auth state on initial app load
   useEffect(() => {
-    const initializeAuth = () => {
-      const token = tokenStorage.getToken();
-      const storedUser = tokenStorage.getUser();
+    const token = tokenStorage.getToken();
+    const storedUser = tokenStorage.getUser();
 
-      if (token && storedUser) {
-        const normalizedUser = normalizeRole(storedUser);
-        tokenStorage.saveAuthData(token, normalizedUser);
-        setUser(normalizedUser);
-      } else {
-        tokenStorage.removeToken();
-        setUser(null);
-      }
-      setLoading(false);
-    };
-
-    initializeAuth();
-  }, []);
-
-  useEffect(() => {
-    const handleAuthExpired = () => setUser(null);
-    window.addEventListener('auth:expired', handleAuthExpired);
-    return () => window.removeEventListener('auth:expired', handleAuthExpired);
-  }, []);
-
-  // 2. Login function
-  const login = async (credentials) => {
-    const data = await loginUser(credentials);
-    const { token, ...rawUserInfo } = data;
-    const userInfo = normalizeRole(rawUserInfo);
-
-    const status = String(userInfo.status || '').toUpperCase();
-
-    if (token && status === 'ACTIVE') {
-      tokenStorage.saveAuthData(token, userInfo);
-      setUser(userInfo);
-    } else if (status && status !== 'ACTIVE') {
+    if (token && storedUser) {
+      const normalizedUser = normalizeRole(storedUser);
+      tokenStorage.saveAuthData(token, normalizedUser);
+      setUser(normalizedUser);
+    } else {
       tokenStorage.removeToken();
       setUser(null);
     }
+    setLoading(false);
+  }, []);
 
-    return { ...data, ...userInfo };
+  const login = async (credentials) => {
+    const data = await loginUser(credentials);
+    const token = data.token || data.jwt;
+    const rawUserInfo = { ...(data.user ? data.user : data) };
+
+    delete rawUserInfo.token;
+    delete rawUserInfo.jwt;
+
+    const userInfo = normalizeRole(rawUserInfo);
+    const status = String(userInfo.status || 'ACTIVE').toUpperCase();
+
+    if (!token) {
+      throw new Error('Login response did not include an authentication token.');
+    }
+
+    if (status !== 'ACTIVE') {
+      tokenStorage.removeToken();
+      setUser(null);
+      throw new Error(`Account status is ${status}. Please contact support.`);
+    }
+
+    tokenStorage.saveAuthData(token, userInfo);
+    setUser(userInfo);
+    return { token, user: userInfo };
   };
 
-  // 3. Register function
-  const register = async (userData) => {
-    return await registerUser(userData);
-  };
+  const register = async (userData) => registerUser(userData);
 
-  // 4. Logout function
   const logout = () => {
     tokenStorage.removeToken();
     setUser(null);
+  };
+
+  const updateUser = (updates) => {
+    setUser((currentUser) => {
+      const nextUser = normalizeRole({ ...currentUser, ...updates });
+      tokenStorage.setUser(nextUser);
+      return nextUser;
+    });
   };
 
   const value = {
@@ -84,6 +81,8 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    updateUser,
+    isAuthenticated: !!user,
   };
 
   return (
@@ -91,4 +90,12 @@ export const AuthProvider = ({ children }) => {
       {!loading && children}
     </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };

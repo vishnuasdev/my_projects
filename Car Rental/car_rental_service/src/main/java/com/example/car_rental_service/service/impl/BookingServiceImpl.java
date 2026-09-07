@@ -10,10 +10,12 @@ import com.example.car_rental_service.repository.BookingRepository;
 import com.example.car_rental_service.repository.CarRepository;
 import com.example.car_rental_service.repository.CustomerRepository;
 import com.example.car_rental_service.service.BookingService;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -40,7 +42,7 @@ public class BookingServiceImpl implements BookingService {
     private String getAuthenticatedUserEmail() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) {
-            throw new IllegalStateException("No authenticated user found.");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No authenticated user found.");
         }
         return auth.getName();
     }
@@ -71,7 +73,7 @@ public class BookingServiceImpl implements BookingService {
         }
 
         if (booking.getStatus() == null) {
-            booking.setStatus(BookingStatus.CONFIRMED);
+            booking.setStatus(BookingStatus.PENDING);
         }
 
         return bookingRepository.save(booking);
@@ -81,7 +83,8 @@ public class BookingServiceImpl implements BookingService {
     @Transactional
     public Booking createBooking(Booking booking, String userEmail) {
         Customer customer = customerRepository.findByUserEmail(userEmail)
-                .orElseThrow(() -> new IllegalArgumentException("Customer profile not found for email: " + userEmail));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Customer profile not found for email: " + userEmail));
         booking.setCustomer(customer);
         return createBooking(booking);
     }
@@ -93,10 +96,12 @@ public class BookingServiceImpl implements BookingService {
 
         String email = getAuthenticatedUserEmail();
         Customer customer = customerRepository.findByUserEmail(email)
-                .orElseThrow(() -> new RuntimeException("Customer profile not found for email: " + email));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Customer profile not found for account: " + email));
 
         Car car = carRepository.findById(carId)
-                .orElseThrow(() -> new RuntimeException("Car not found with ID: " + carId));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Car not found with ID: " + carId));
 
         if (!car.isAvailable()) {
             throw new IllegalStateException("Car is currently unavailable.");
@@ -158,9 +163,8 @@ public class BookingServiceImpl implements BookingService {
     @Transactional(readOnly = true)
     public List<Booking> getMyBookings() {
         String email = getAuthenticatedUserEmail();
-        Customer customer = customerRepository.findByUserEmail(email)
-                .orElseThrow(() -> new RuntimeException("Customer profile not found."));
-        return bookingRepository.findByCustomerId(customer.getId());
+        // Method 1: Fetch directly via join repository query to avoid throwing 500 error on empty customer
+        return bookingRepository.findByCustomerUserEmail(email);
     }
 
     @Override
@@ -168,7 +172,8 @@ public class BookingServiceImpl implements BookingService {
     public List<Booking> getBookingsForAgencyCars() {
         String email = getAuthenticatedUserEmail();
         Agency agency = agencyRepository.findByUserEmail(email)
-                .orElseThrow(() -> new RuntimeException("Agency profile not found."));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Agency profile not found for user: " + email));
         return bookingRepository.findByCarAgencyId(agency.getId());
     }
 
@@ -177,10 +182,12 @@ public class BookingServiceImpl implements BookingService {
     public Booking updateBookingStatus(Long bookingId, BookingStatus status) {
         String email = getAuthenticatedUserEmail();
         Agency agency = agencyRepository.findByUserEmail(email)
-                .orElseThrow(() -> new RuntimeException("Agency profile not found."));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Agency profile not found."));
 
         Booking booking = bookingRepository.findByIdAndCarAgencyId(bookingId, agency.getId())
-                .orElseThrow(() -> new RuntimeException("Booking not found or not associated with your agency."));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Booking not found or not associated with your agency."));
 
         if (status == BookingStatus.CONFIRMED) {
             boolean existsConflict = bookingRepository.existsOverlappingBooking(
@@ -197,7 +204,9 @@ public class BookingServiceImpl implements BookingService {
             if (booking.getCar() != null) {
                 booking.getCar().setAvailable(false);
             }
-        } else if (status == BookingStatus.CANCELLED || status == BookingStatus.COMPLETED) {
+        } else if (status == BookingStatus.CANCELLED
+                || status == BookingStatus.REJECTED
+                || status == BookingStatus.COMPLETED) {
             if (booking.getCar() != null) {
                 booking.getCar().setAvailable(true);
             }

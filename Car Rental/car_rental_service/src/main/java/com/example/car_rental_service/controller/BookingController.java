@@ -25,7 +25,10 @@ public class BookingController {
 
     @PostMapping("/create")
     public ResponseEntity<Booking> createBooking(@Valid @RequestBody Booking booking) {
-        Booking savedBooking = bookingService.createBooking(booking);
+        if (booking.getCar() == null || booking.getCar().getId() == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        Booking savedBooking = bookingService.createBookingRequest(booking.getCar().getId(), booking);
         return new ResponseEntity<>(savedBooking, HttpStatus.CREATED);
     }
 

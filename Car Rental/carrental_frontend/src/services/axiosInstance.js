@@ -1,9 +1,5 @@
 import axios from 'axios';
-import { getToken, removeToken } from './tokenStorage';
-
-let backendOffline = false;
-
-export const isBackendOffline = () => backendOffline;
+import { getToken } from './tokenStorage';
 
 const axiosInstance = axios.create({
   baseURL: 'http://localhost:8080/api',
@@ -17,6 +13,7 @@ axiosInstance.interceptors.request.use(
   (config) => {
     const token = getToken();
     if (token) {
+      config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -26,18 +23,12 @@ axiosInstance.interceptors.request.use(
 
 axiosInstance.interceptors.response.use(
   (response) => {
-    backendOffline = false;
     window.dispatchEvent(new Event('backend:online'));
     return response;
   },
   (error) => {
-    if (error.response?.status === 401) {
-      removeToken();
-      window.dispatchEvent(new Event('auth:expired'));
-    }
-
+    // A failed dashboard request must not destroy an otherwise valid local session.
     if (!error.response || error.response.status >= 500) {
-      backendOffline = true;
       window.dispatchEvent(new Event('backend:offline'));
     }
 

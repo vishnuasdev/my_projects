@@ -45,6 +45,9 @@ export const ownerApi = {
     getProfile: async () => (await API.get('/owner/profile')).data,
     updateProfile: async (owner, image) => (await API.put('/owner/profile', createFormData(owner, image))).data,
     getProfileImageUrl: (userId) => `${API.defaults.baseURL}/owner/profile/image/${userId}`,
-    placeBid: async (bid) => (await API.post('/owner/place', bid)).data,
-    getBidsByCar: async (carId) => (await API.get(`/owner/car/${carId}`)).data,
+    placeBid: async (bid) => (await API.post('/owner/bids', bid)).data,
+    getMyBids: async () => (await API.get('/owner/bids')).data,
+    getBidsByCar: async (carId) => (await API.get(`/owner/cars/${carId}/bids`)).data,
+    cancelBid: async (bidId) => (await API.delete(`/owner/bids/${bidId}`)).data,
+    recallCar: async (carId) => (await API.put(`/owner/cars/${carId}/recall`)).data,
 };
