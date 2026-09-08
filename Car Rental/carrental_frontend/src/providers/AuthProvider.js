@@ -17,6 +17,7 @@ const normalizeRole = (userInfo) => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,11 +28,24 @@ export const AuthProvider = ({ children }) => {
       const normalizedUser = normalizeRole(storedUser);
       tokenStorage.saveAuthData(token, normalizedUser);
       setUser(normalizedUser);
+      setAccounts(tokenStorage.getAccounts());
     } else {
       tokenStorage.removeToken();
       setUser(null);
+      setAccounts([]);
     }
     setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const handleExpiredSession = () => {
+      tokenStorage.removeToken();
+      setUser(null);
+      setAccounts(tokenStorage.getAccounts());
+    };
+
+    window.addEventListener('auth:expired', handleExpiredSession);
+    return () => window.removeEventListener('auth:expired', handleExpiredSession);
   }, []);
 
   const login = async (credentials) => {
@@ -50,13 +64,12 @@ export const AuthProvider = ({ children }) => {
     }
 
     if (status !== 'ACTIVE') {
-      tokenStorage.removeToken();
-      setUser(null);
       throw new Error(`Account status is ${status}. Please contact support.`);
     }
 
     tokenStorage.saveAuthData(token, userInfo);
     setUser(userInfo);
+    setAccounts(tokenStorage.getAccounts());
     return { token, user: userInfo };
   };
 
@@ -64,13 +77,30 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     tokenStorage.removeToken();
-    setUser(null);
+    const nextUser = tokenStorage.getUser();
+    setUser(nextUser ? normalizeRole(nextUser) : null);
+    setAccounts(tokenStorage.getAccounts());
+  };
+
+  const switchAccount = (accountKey) => {
+    if (!tokenStorage.switchAccount(accountKey)) return false;
+    const nextUser = tokenStorage.getUser();
+    setUser(nextUser ? normalizeRole(nextUser) : null);
+    setAccounts(tokenStorage.getAccounts());
+    return Boolean(nextUser);
   };
 
   const updateUser = (updates) => {
     setUser((currentUser) => {
-      const nextUser = normalizeRole({ ...currentUser, ...updates });
+      const nextUser = normalizeRole({
+        ...currentUser,
+        ...updates,
+        id: currentUser?.id,
+        role: currentUser?.role,
+        email: currentUser?.email,
+      });
       tokenStorage.setUser(nextUser);
+      setAccounts(tokenStorage.getAccounts());
       return nextUser;
     });
   };
@@ -83,6 +113,8 @@ export const AuthProvider = ({ children }) => {
     logout,
     updateUser,
     isAuthenticated: !!user,
+    accounts,
+    switchAccount,
   };
 
   return (

@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
-const LoginForm = () => {
+const LoginForm = ({ allowAuthenticated = false }) => {
     const [formData, setFormData] = useState({ email: '', password: '' });
     const [statusError, setStatusError] = useState({ message: '', status: '' });
     const [isLoading, setIsLoading] = useState(false);
 
     const { login } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -61,7 +62,7 @@ const LoginForm = () => {
 
     return (
         <div className="auth-card">
-            <h2>Sign In</h2>
+            <h2>{allowAuthenticated || location.pathname === '/login/add' ? 'Add account' : 'Sign In'}</h2>
 
             {statusError.message && (
                 <div style={{

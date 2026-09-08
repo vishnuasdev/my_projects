@@ -99,12 +99,17 @@ public class BookingServiceImpl implements BookingService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Customer profile not found for account: " + email));
 
-        Car car = carRepository.findById(carId)
+        Car car = carRepository.findByIdForUpdate(carId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Car not found with ID: " + carId));
 
         if (!car.isAvailable()) {
             throw new IllegalStateException("Car is currently unavailable.");
+        }
+        if (car.getAgency() == null
+                || car.getAgency().getStatus() != com.example.car_rental_service.model.enums.AgencyStatus.APPROVED) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "This vehicle is not available for customer bookings.");
         }
 
         boolean isOverlapping = bookingRepository.existsOverlappingBooking(
@@ -180,12 +185,16 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public Booking updateBookingStatus(Long bookingId, BookingStatus status) {
+        if (status == BookingStatus.CONFIRMED) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Only the assigned agency can confirm a customer booking.");
+        }
         String email = getAuthenticatedUserEmail();
         Agency agency = agencyRepository.findByUserEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Agency profile not found."));
 
-        Booking booking = bookingRepository.findByIdAndCarAgencyId(bookingId, agency.getId())
+        Booking booking = bookingRepository.findByIdAndCarAgencyIdForUpdate(bookingId, agency.getId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Booking not found or not associated with your agency."));
 
@@ -194,7 +203,7 @@ public class BookingServiceImpl implements BookingService {
                     booking.getCar().getId(),
                     booking.getStartDate(),
                     booking.getEndDate(),
-                    List.of(BookingStatus.CANCELLED),
+                    List.of(BookingStatus.CANCELLED, BookingStatus.REJECTED, BookingStatus.COMPLETED),
                     booking.getId()
             );
 
@@ -219,7 +228,7 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public boolean cancelBooking(Long id) {
-        return bookingRepository.findById(id).map(booking -> {
+        return bookingRepository.findByIdForUpdate(id).map(booking -> {
             booking.setStatus(BookingStatus.CANCELLED);
             if (booking.getCar() != null) {
                 booking.getCar().setAvailable(true);
@@ -232,9 +241,10 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public boolean cancelBooking(Long id, String userEmail) {
-        return bookingRepository.findById(id)
+        return bookingRepository.findByIdForUpdate(id)
                 .filter(b -> b.getCustomer() != null && b.getCustomer().getUser() != null
                         && b.getCustomer().getUser().getEmail().equals(userEmail))
+                .filter(b -> b.getStatus() == BookingStatus.PENDING)
                 .map(booking -> {
                     booking.setStatus(BookingStatus.CANCELLED);
                     if (booking.getCar() != null) {

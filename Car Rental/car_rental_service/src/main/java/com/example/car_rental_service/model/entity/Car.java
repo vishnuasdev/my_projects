@@ -28,6 +28,9 @@ public class Car {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    private Long version;
+
     @NotBlank @Size(max = 80)
     private String brand;
 
@@ -43,6 +46,9 @@ public class Car {
 
     @NotBlank
     private String transmission;
+
+    @Size(max = 30)
+    private String type;
 
     @NotNull @DecimalMin(value = "0.01")
     private Double dailyRate;

@@ -33,11 +33,19 @@ export const updateProfileByRole = async (role, profileData, user, image) => {
     const cleanRole = normalizeRole(role);
 
     if (cleanRole === 'customer') {
-        const profileId = profileData.id || getProfileId(user);
+        const profileId = profileData.id || user?.profileId || user?.customerId;
         if (!profileId) {
             throw new Error('Customer profile ID is missing from the login response.');
         }
-        return (await API.put(`/customers/${profileId}`, createProfileFormData('customer', profileData, image))).data;
+        const customerPayload = {
+            ...profileData,
+            name: profileData.name,
+            phone: profileData.phone,
+        };
+        if (!image) {
+            return (await API.patch(`/customers/${profileId}`, customerPayload)).data;
+        }
+        return (await API.put(`/customers/${profileId}`, createProfileFormData('customer', customerPayload, image))).data;
     }
 
     if (cleanRole === 'owner' || cleanRole === 'agency') {

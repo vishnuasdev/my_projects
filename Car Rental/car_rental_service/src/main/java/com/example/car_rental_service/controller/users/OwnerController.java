@@ -1,6 +1,7 @@
 package com.example.car_rental_service.controller.users;
 
 import com.example.car_rental_service.model.dto.response.UserResponse;
+import com.example.car_rental_service.model.dto.request.OwnerBidRequest;
 import com.example.car_rental_service.model.entity.Bid;
 import com.example.car_rental_service.model.entity.Car;
 import com.example.car_rental_service.model.entity.users.Agency;
@@ -9,9 +10,12 @@ import com.example.car_rental_service.service.BidService;
 import com.example.car_rental_service.service.CarService;
 import com.example.car_rental_service.service.AgencyService;
 import com.example.car_rental_service.service.OwnerService;
+import com.example.car_rental_service.repository.AgencyRepository;
+import com.example.car_rental_service.repository.CarRepository;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -35,13 +39,18 @@ public class OwnerController {
     private final OwnerService ownerService;
     private final BidService bidService;
     private final AgencyService agencyService;
+    private final AgencyRepository agencyRepository;
+    private final CarRepository carRepository;
 
     public OwnerController(CarService carService, OwnerService ownerService, BidService bidService,
-                           AgencyService agencyService) {
+                           AgencyService agencyService, AgencyRepository agencyRepository,
+                           CarRepository carRepository) {
         this.carService = carService;
         this.ownerService = ownerService;
         this.bidService = bidService;
         this.agencyService = agencyService;
+        this.agencyRepository = agencyRepository;
+        this.carRepository = carRepository;
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -137,6 +146,13 @@ public class OwnerController {
         return ResponseEntity.ok(updated);
     }
 
+    @DeleteMapping("/cars/{id}/images/{index}")
+    public ResponseEntity<Car> deleteCarImage(
+            @PathVariable @Positive Long id,
+            @PathVariable @PositiveOrZero int index) {
+        return ResponseEntity.ok(carService.removeCarImage(id, index));
+    }
+
     @DeleteMapping("/cars/{id}")
     public ResponseEntity<Void> deleteCar(@PathVariable @Positive Long id) {
         if (carService.deleteCar(id)) {
@@ -161,6 +177,9 @@ public class OwnerController {
                     UserResponse response = new UserResponse();
                     response.setId(owner.getId());
                     response.setName(owner.getName());
+                    response.setDob(owner.getDob());
+                    response.setLocation(owner.getLocation());
+                    response.setAddress(owner.getAddress());
                     if (owner.getUser() != null) {
                         response.setEmail(owner.getUser().getEmail());
                     }
@@ -197,6 +216,60 @@ public class OwnerController {
     }
 
     //BIDS OWNER SERVICES
+    @PostMapping("/bids")
+    public ResponseEntity<Bid> submitBid(@Valid @RequestBody OwnerBidRequest request,
+                                         Authentication authentication) {
+        Owner owner = ownerService.getOwnerByUserEmail(authentication.getName())
+                .orElseThrow(() -> new IllegalArgumentException("Owner profile not found."));
+        Car car = carRepository.findById(request.carId())
+                .orElseThrow(() -> new IllegalArgumentException("Car not found."));
+        Agency agency = agencyRepository.findById(request.agencyId())
+                .orElseThrow(() -> new IllegalArgumentException("Agency not found."));
+        if (agency.getStatus() != com.example.car_rental_service.model.enums.AgencyStatus.APPROVED) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "Only approved agencies can receive bids.");
+        }
+
+        if (car.getOwner() == null || !owner.getId().equals(car.getOwner().getId())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "You can only bid with your own car.");
+        }
+
+        Bid bid = new Bid();
+        bid.setOwner(owner);
+        bid.setCar(car);
+        bid.setAgency(agency);
+        bid.setRatePerDay(request.ratePerDay());
+        return ResponseEntity.status(HttpStatus.CREATED).body(bidService.placeBid(bid));
+    }
+
+    @GetMapping("/bids")
+    public ResponseEntity<List<Bid>> getMyBids(Authentication authentication) {
+        return ResponseEntity.ok(bidService.getBidsByOwnerEmail(authentication.getName()));
+    }
+
+    @GetMapping("/cars/{carId}/bids")
+    public ResponseEntity<List<Bid>> getMyCarBids(@PathVariable Long carId,
+                                                  Authentication authentication) {
+        Owner owner = ownerService.getOwnerByUserEmail(authentication.getName())
+                .orElseThrow(() -> new IllegalArgumentException("Owner profile not found."));
+        Car car = carRepository.findById(carId)
+                .orElseThrow(() -> new IllegalArgumentException("Car not found."));
+        if (car.getOwner() == null || !owner.getId().equals(car.getOwner().getId())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "You can only view bids for your own car.");
+        }
+        return ResponseEntity.ok(bidService.getBidsByCar(carId));
+    }
+
+    @DeleteMapping("/bids/{id}")
+    public ResponseEntity<Void> cancelBid(@PathVariable Long id, Authentication authentication) {
+        if (bidService.deleteBidByOwner(id, authentication.getName())) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.notFound().build();
+    }
+
     @PostMapping("/place")
     public ResponseEntity<Bid> placeBid(@RequestBody Bid bid) {
         Bid savedBid = bidService.placeBid(bid);

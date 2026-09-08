@@ -16,7 +16,7 @@ const BookingModal = ({ isOpen, onClose, vehicle, onSubmit }) => {
         const start = new Date(startDate);
         const end = new Date(endDate);
         const diffTime = end - start;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
         return diffDays > 0 ? diffDays : 0;
     };
 
@@ -28,8 +28,16 @@ const BookingModal = ({ isOpen, onClose, vehicle, onSubmit }) => {
         e.preventDefault();
         setError('');
 
+        if (!startDate || !endDate) {
+            setError('Select both pick-up and return dates.');
+            return;
+        }
         if (daysCount <= 0) {
-            setError('End date must be after the start date.');
+            setError('Return date must be after the pick-up date.');
+            return;
+        }
+        if (!vehicle.id) {
+            setError('This vehicle is no longer available. Refresh the page and try again.');
             return;
         }
 
@@ -43,7 +51,12 @@ const BookingModal = ({ isOpen, onClose, vehicle, onSubmit }) => {
             });
             onClose();
         } catch (err) {
-            setError(err.response?.data?.message || 'Failed to submit booking request.');
+            const responseMessage = err.response?.data?.message;
+            const responseError = err.response?.data?.error;
+            const fallback = err.response?.status === 400
+                ? 'Booking validation failed. Confirm your dates and complete your customer profile, then try again.'
+                : 'Failed to submit booking request.';
+            setError(responseMessage || responseError || err.message || fallback);
         } finally {
             setIsLoading(false);
         }
@@ -53,6 +66,9 @@ const BookingModal = ({ isOpen, onClose, vehicle, onSubmit }) => {
         <Modal isOpen={isOpen} onClose={onClose} title={`Book ${vehicle.brand} ${vehicle.model}`}>
             <form onSubmit={handleSubmit}>
                 {error && <div style={{ color: '#dc2626', marginBottom: '1rem', fontSize: '0.875rem' }}>{error}</div>}
+                <div style={{ color: '#475569', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+                    This sends a booking request to the agency. Your booking is confirmed only after the agency accepts it.
+                </div>
 
                 <Input
                     label="Pick-up Date"
@@ -90,7 +106,7 @@ const BookingModal = ({ isOpen, onClose, vehicle, onSubmit }) => {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                     <Button variant="outline" onClick={onClose} type="button">Cancel</Button>
                     <Button variant="primary" type="submit" isLoading={isLoading} disabled={daysCount <= 0}>
-                        Confirm Booking
+                        Send Booking Request
                     </Button>
                 </div>
             </form>

@@ -7,6 +7,8 @@ import { bookingApi } from '../bookings/api/bookingApi';
 import { API_BASE_URL } from '../../config/constants';
 import { tokenStorage } from '../../services/tokenStorage';
 
+const normalizeValue = (value) => String(value ?? '').trim().toLowerCase();
+
 const PublicView = ({ isCustomerView = false }) => {
     const navigate = useNavigate();
 
@@ -32,12 +34,12 @@ const PublicView = ({ isCustomerView = false }) => {
     // Booking Modal State
     const [selectedCar, setSelectedCar] = useState(null);
 
-    const fetchCars = async () => {
+    const fetchCars = useCallback(async () => {
         setIsLoading(true);
         setError('');
         try {
             const response = await axiosInstance.get('/cars/available');
-            const carList = response.data || [];
+            const carList = Array.isArray(response.data) ? response.data : [];
             setCars(carList);
             setFilteredCars(carList);
 
@@ -55,51 +57,51 @@ const PublicView = ({ isCustomerView = false }) => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchCars();
-    }, []);
+    }, [fetchCars]);
 
     const applyFilters = useCallback(() => {
         let result = [...cars];
 
         // Search by Brand or Model
-        if (searchTerm.trim() !== '') {
-            const term = searchTerm.toLowerCase();
+        const term = normalizeValue(searchTerm);
+        if (term !== '') {
             result = result.filter(
                 (car) =>
-                    car.brand?.toLowerCase().includes(term) ||
-                    car.model?.toLowerCase().includes(term)
+                    [car.brand, car.model, car.registrationNo, car.type]
+                        .some((value) => normalizeValue(value).includes(term))
             );
         }
 
         // Filter by Fuel Type
         if (fuelFilter !== 'ALL') {
             result = result.filter(
-                (car) => car.fuelType?.toUpperCase() === fuelFilter.toUpperCase()
+                (car) => normalizeValue(car.fuelType) === normalizeValue(fuelFilter)
             );
         }
 
         // Filter by Transmission
         if (transmissionFilter !== 'ALL') {
             result = result.filter(
-                (car) => car.transmission?.toUpperCase() === transmissionFilter.toUpperCase()
+                (car) => normalizeValue(car.transmission) === normalizeValue(transmissionFilter)
             );
         }
 
         // Apply a price limit only after the user changes the slider.
         if (maxPrice !== null) {
-            result = result.filter((car) => Number(car.dailyRate || 0) <= maxPrice);
+            result = result.filter((car) => Number(car.dailyRate) <= maxPrice);
         }
 
         // Sort Logic
         if (sortBy === 'PRICE_LOW_HIGH') {
-            result.sort((a, b) => (a.dailyRate || 0) - (b.dailyRate || 0));
+            result.sort((a, b) => Number(a.dailyRate || 0) - Number(b.dailyRate || 0));
         } else if (sortBy === 'PRICE_HIGH_LOW') {
-            result.sort((a, b) => (b.dailyRate || 0) - (a.dailyRate || 0));
+            result.sort((a, b) => Number(b.dailyRate || 0) - Number(a.dailyRate || 0));
         } else if (sortBy === 'NAME_ASC') {
-            result.sort((a, b) => (a.brand || '').localeCompare(b.brand || ''));
+            result.sort((a, b) => normalizeValue(a.brand).localeCompare(normalizeValue(b.brand)));
         }
 
         setFilteredCars(result);
@@ -129,8 +131,11 @@ const PublicView = ({ isCustomerView = false }) => {
     };
 
     const handleBookingSubmit = async (bookingData) => {
+        if (!bookingData.carId) {
+            throw new Error('The selected vehicle is no longer available. Please refresh and try again.');
+        }
         await bookingApi.createBooking(bookingData);
-        fetchCars();
+        await fetchCars();
     };
 
     const getCarImageUrl = (car) => {
@@ -195,7 +200,7 @@ const PublicView = ({ isCustomerView = false }) => {
                         <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.35rem' }}>Search Vehicle</label>
                         <input
                             type="text"
-                            placeholder="Search make or model..."
+                            placeholder="Search make, model, type, or registration..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.875rem', boxSizing: 'border-box' }}
@@ -324,7 +329,7 @@ const PublicView = ({ isCustomerView = false }) => {
                                     Transmission: {transmissionFilter}
                                 </span>
                             )}
-                            {maxPrice < 10000 && (
+                            {maxPrice !== null && (
                                 <span style={{ backgroundColor: '#e0f2fe', color: '#0369a1', fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '999px', fontWeight: '500' }}>
                                     Max ₹{maxPrice.toLocaleString('en-IN')}
                                 </span>
@@ -346,10 +351,16 @@ const PublicView = ({ isCustomerView = false }) => {
                         </div>
                     ) : filteredCars.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '4rem 2rem', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                            <p style={{ color: '#64748b', margin: '0 0 1rem 0' }}>No vehicles match your selected criteria.</p>
-                            <button onClick={resetFilters} style={{ padding: '0.5rem 1rem', border: '1px solid #2563eb', color: '#2563eb', background: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>
-                                Clear All Filters
-                            </button>
+                            <p style={{ color: '#64748b', margin: '0 0 1rem 0' }}>
+                                {cars.length === 0
+                                    ? 'No vehicles are currently available for booking.'
+                                    : 'No vehicles match your selected criteria.'}
+                            </p>
+                            {cars.length > 0 && (
+                                <button onClick={resetFilters} style={{ padding: '0.5rem 1rem', border: '1px solid #2563eb', color: '#2563eb', background: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>
+                                    Clear All Filters
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <>

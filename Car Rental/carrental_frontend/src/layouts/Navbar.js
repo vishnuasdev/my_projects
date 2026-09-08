@@ -4,7 +4,7 @@ import { useAuth } from '../features/auth/hooks/useAuth';
 import Button from '../components/ui/Button';
 
 const Navbar = () => {
-    const { user, logout } = useAuth();
+    const { user, logout, accounts, switchAccount } = useAuth();
     const navigate = useNavigate();
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [isHidden, setIsHidden] = useState(false);
@@ -74,6 +74,14 @@ const Navbar = () => {
     const handleLogout = () => {
         setDropdownOpen(false);
         logout();
+    };
+
+    const handleSwitchAccount = (accountKey) => {
+        if (accountKey === String(user?.email || '').toLowerCase()) return;
+        if (switchAccount(accountKey)) {
+            setDropdownOpen(false);
+            navigate('/');
+        }
     };
 
     const homeDestination = user ? getDashboardPath() : '/';
@@ -214,6 +222,29 @@ const Navbar = () => {
                                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                     >
                                         Profile
+                                    </button>
+                                    {accounts.length > 1 && (
+                                        <div style={{ borderTop: '1px solid #334155', padding: '0.5rem 0' }}>
+                                            <div style={{ padding: '0.25rem 1rem', fontSize: '0.7rem', color: '#94a3b8' }}>Switch account</div>
+                                            {accounts.map(account => (
+                                                <button
+                                                    key={account.key}
+                                                    type="button"
+                                                    onClick={() => handleSwitchAccount(account.key)}
+                                                    style={{ width: '100%', padding: '0.5rem 1rem', backgroundColor: account.key === String(user?.email || '').toLowerCase() ? '#1e3a8a' : 'transparent', color: '#cbd5e1', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '0.8rem' }}
+                                                >
+                                                    {account.name || account.email}
+                                                    <span style={{ display: 'block', color: '#94a3b8', fontSize: '0.7rem' }}>{account.role}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => { setDropdownOpen(false); navigate('/login/add'); }}
+                                        style={{ width: '100%', padding: '0.75rem 1rem', backgroundColor: 'transparent', color: '#60a5fa', border: 'none', borderTop: '1px solid #334155', textAlign: 'left', cursor: 'pointer', fontSize: '0.875rem' }}
+                                    >
+                                        + Add account
                                     </button>
                                     <button 
                                         onClick={handleLogout}

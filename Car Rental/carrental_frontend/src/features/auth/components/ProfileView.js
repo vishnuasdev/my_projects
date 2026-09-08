@@ -13,6 +13,8 @@ const ProfileView = () => {
     const [loadError, setLoadError] = useState('');
     
     const [dbProfile, setDbProfile] = useState({});
+    const [profileImage, setProfileImage] = useState(null);
+    const [imagePreview, setImagePreview] = useState('');
     
     const [form, setForm] = useState({
         name: '',
@@ -65,8 +67,8 @@ const ProfileView = () => {
 
             setDbProfile(data);
             setForm({
-                name: data.name || data.agencyName || data.fullName || '',
-                phone: data.phone || data.mobile || data.contactNumber || '',
+                name: data.name || data.userName || data.agencyName || data.fullName || user?.name || '',
+                phone: data.phone || data.mobile || data.contactNumber || data.phoneNumber || user?.phone || '',
                 dob: data.dob || '',
                 licenseNo: data.licenseNo || '',
                 location: data.location || '',
@@ -94,8 +96,18 @@ const ProfileView = () => {
         }
     }, [userRole, fetchProfile]);
 
+    useEffect(() => {
+        if (!profileImage) {
+            setImagePreview('');
+            return undefined;
+        }
+        const previewUrl = URL.createObjectURL(profileImage);
+        setImagePreview(previewUrl);
+        return () => URL.revokeObjectURL(previewUrl);
+    }, [profileImage]);
+
     const handleChange = (e) => {
-        if (!profileApiAvailable || !customerProfileIdAvailable) return;
+        if (!profileApiAvailable) return;
         const { name, value } = e.target;
         if (name.startsWith('addr_')) {
             const field = name.replace('addr_', '');
@@ -111,9 +123,32 @@ const ProfileView = () => {
         }
     };
 
+    const handleImageChange = (e) => {
+        const image = e.target.files?.[0];
+        if (!image) {
+            setProfileImage(null);
+            return;
+        }
+        if (!image.type.startsWith('image/')) {
+            setSaveError('Please select a valid image file.');
+            e.target.value = '';
+            return;
+        }
+        if (image.size > 5 * 1024 * 1024) {
+            setSaveError('Profile picture must be 5 MB or smaller.');
+            e.target.value = '';
+            return;
+        }
+        setSaveError('');
+        setProfileImage(image);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!profileApiAvailable || !customerProfileIdAvailable) return;
+        if (!profileApiAvailable) {
+            setSaveError('Profile updates are not available for this account role.');
+            return;
+        }
 
         if (userRole === 'AGENCY' && (!form.name.trim() || !form.location.trim() || !form.address.street.trim() || !form.address.city.trim() || !form.address.state.trim())) {
             setSaveError('Agency name, location, street, city, and state are required.');
@@ -124,21 +159,64 @@ const ProfileView = () => {
             setSaveError('Full name, Date of Birth, and Driving License Number are required.');
             return;
         }
+        if (userRole === 'CUSTOMER'
+            && (!form.address.street.trim() || !form.address.city.trim() || !form.address.state.trim())) {
+            setSaveError('Street, city, and state are required to save your customer profile.');
+            return;
+        }
+        if (!/^[A-Za-z][A-Za-z .'-]{1,99}$/.test(form.name.trim())) {
+            setSaveError('Name must contain letters and may include spaces, apostrophes, periods, or hyphens.');
+            return;
+        }
+        if (form.phone.trim() && !/^\+?[0-9][0-9 ()-]{7,19}$/.test(form.phone.trim())) {
+            setSaveError('Enter a valid phone number.');
+            return;
+        }
+        if (userRole === 'CUSTOMER' && !/^[A-Za-z0-9 -]{5,30}$/.test(form.licenseNo.trim())) {
+            setSaveError('Driving License Number must be 5 to 30 letters, numbers, spaces, or hyphens.');
+            return;
+        }
+        if (form.address.pincode.trim() && !/^[0-9]{4,10}$/.test(form.address.pincode.trim())) {
+            setSaveError('Pincode must contain 4 to 10 digits.');
+            return;
+        }
+        if (form.dob && form.dob > new Date().toISOString().split('T')[0]) {
+            setSaveError('Date of Birth cannot be in the future.');
+            return;
+        }
 
         setSaving(true);
         setSaveError('');
         try {
-            const updatedData = await updateProfileByRole(userRole, form, user) || {};
+            const updatedData = await updateProfileByRole(
+                userRole,
+                { ...form, id: dbProfile.id },
+                user,
+                profileImage
+            ) || {};
             setDbProfile(updatedData);
             updateUser({
-                ...updatedData,
-                name: updatedData.name || updatedData.agencyName || updatedData.fullName || form.name,
-                phone: updatedData.phone || updatedData.mobile || form.phone
+                profileId: updatedData.id || dbProfile.id || user.profileId,
+                customerId: userRole === 'CUSTOMER'
+                    ? (updatedData.id || dbProfile.id || user.customerId)
+                    : user.customerId,
+                name: updatedData.name || updatedData.userName || updatedData.agencyName || updatedData.fullName || form.name,
+                phone: updatedData.phone || updatedData.mobile || updatedData.contactNumber || updatedData.phoneNumber || form.phone
             });
-            alert("Profile details saved successfully!");
+            setSaveError('');
         } catch (err) {
             console.error("Save error:", err);
-            setSaveError(err.response?.data?.message || err.response?.data?.error || "Failed to update profile details.");
+            const responseData = err.response?.data;
+            const fieldErrors = responseData?.errors && typeof responseData.errors === "object"
+                ? Object.entries(responseData.errors).map(([field, message]) => `${field}: ${message}`).join(", ")
+                : null;
+            setSaveError(
+                responseData?.message
+                || responseData?.error
+                || responseData?.details
+                || fieldErrors
+                || "Failed to update profile details."
+            );
         } finally {
             setSaving(false);
         }
@@ -435,7 +513,7 @@ const ProfileView = () => {
                             {saveError}
                         </div>
                     )}
-                    <fieldset disabled={!profileApiAvailable} style={{ border: 0, padding: 0, margin: 0, display: 'contents' }}>
+                    <fieldset disabled={!profileApiAvailable || saving} style={{ border: 0, padding: 0, margin: 0, display: 'contents' }}>
 
                     {/* Top Row: Email & Primary Location */}
                     <div className="grid-2">
@@ -499,6 +577,27 @@ const ProfileView = () => {
                     </div>
 
                     {/* Secondary Information: DOB & Driving License */}
+                    <div className="field-group">
+                        <label className="field-label">Profile Picture <span style={{ color: '#64748b', fontWeight: 400 }}>(optional)</span></label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                            {imagePreview && (
+                                <img
+                                    src={imagePreview}
+                                    alt="Selected profile preview"
+                                    style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '1px solid #cbd5e1' }}
+                                />
+                            )}
+                            <input
+                                className="ui-input"
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                onChange={handleImageChange}
+                                style={{ maxWidth: 360, paddingTop: '0.5rem' }}
+                            />
+                        </div>
+                        <p className="notice-text">You can save your profile without uploading a picture. PNG, JPG, or WebP up to 5 MB.</p>
+                    </div>
+
                     <div className="grid-2">
                         {(userRole === 'CUSTOMER' || userRole === 'OWNER') && (
                             <div className="field-group">
@@ -655,7 +754,7 @@ const ProfileView = () => {
                         <button type="button" className="cancel-button" onClick={handleCancel}>
                             Cancel
                         </button>
-                        {profileApiAvailable && !isFullyLocked() && (
+                        {profileApiAvailable && (!isFullyLocked() || profileImage) && (
                             <button type="submit" className="save-button" disabled={saving}>
                                 {saving ? 'Saving...' : 'Save Profile'}
                             </button>

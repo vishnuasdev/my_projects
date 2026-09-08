@@ -94,6 +94,12 @@ public class CustomerServiceImpl implements CustomerService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only update your own customer profile.");
         }
 
+        if (updatedCustomer.getProfileName() != null && !updatedCustomer.getProfileName().isBlank()) {
+            existingCustomer.getUser().setName(updatedCustomer.getProfileName().trim());
+        }
+        if (updatedCustomer.getProfilePhone() != null) {
+            existingCustomer.getUser().setPhoneNumber(updatedCustomer.getProfilePhone().trim());
+        }
         existingCustomer.setDob(updatedCustomer.getDob());
         existingCustomer.setLicenseNo(updatedCustomer.getLicenseNo());
         existingCustomer.setLocation(updatedCustomer.getLocation());
@@ -107,6 +113,8 @@ public class CustomerServiceImpl implements CustomerService {
             existingCustomer.setProfileImage(image.getBytes());
         }
 
+        existingCustomer.setProfileName(existingCustomer.getUser().getName());
+        existingCustomer.setProfilePhone(existingCustomer.getUser().getPhoneNumber());
         return customerRepository.save(existingCustomer);
     }
 
@@ -120,6 +128,12 @@ public class CustomerServiceImpl implements CustomerService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only update your own customer profile.");
         }
 
+        if (partialCustomer.getProfileName() != null && !partialCustomer.getProfileName().isBlank()) {
+            customer.getUser().setName(partialCustomer.getProfileName().trim());
+        }
+        if (partialCustomer.getProfilePhone() != null) {
+            customer.getUser().setPhoneNumber(partialCustomer.getProfilePhone().trim());
+        }
         if (partialCustomer.getDob() != null && !partialCustomer.getDob().isBlank()) {
             customer.setDob(partialCustomer.getDob());
         }
@@ -133,6 +147,8 @@ public class CustomerServiceImpl implements CustomerService {
             customer.setAddress(partialCustomer.getAddress());
         }
 
+        customer.setProfileName(customer.getUser().getName());
+        customer.setProfilePhone(customer.getUser().getPhoneNumber());
         return customerRepository.save(customer);
     }
 

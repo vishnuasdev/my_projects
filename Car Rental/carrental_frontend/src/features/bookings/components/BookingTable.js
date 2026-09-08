@@ -39,13 +39,18 @@ const BookingTable = ({ bookings, onStatusUpdate, isAgency = false, cancellingId
                         <td style={{ padding: '12px', textAlign: 'right' }}>
                             {isAgency && booking.status === 'PENDING' && (
                                 <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                    <Button size="sm" variant="primary" onClick={() => onStatusUpdate(booking.id, 'CONFIRMED')}>
+                                    <Button size="sm" variant="primary" disabled={cancellingId === booking.id} onClick={() => onStatusUpdate(booking.id, 'CONFIRMED')}>
                                         Approve
                                     </Button>
-                                    <Button size="sm" variant="danger" onClick={() => onStatusUpdate(booking.id, 'REJECTED')}>
+                                    <Button size="sm" variant="danger" disabled={cancellingId === booking.id} onClick={() => onStatusUpdate(booking.id, 'REJECTED')}>
                                         Reject
                                     </Button>
                                 </div>
+                            )}
+                            {isAgency && booking.status === 'CONFIRMED' && (
+                                <Button size="sm" variant="primary" onClick={() => onStatusUpdate(booking.id, 'COMPLETED')}>
+                                    Mark Completed
+                                </Button>
                             )}
                             {!isAgency && booking.status === 'PENDING' && (
                                 <Button size="sm" variant="outline" disabled={cancellingId === booking.id} onClick={() => onStatusUpdate(booking.id, 'CANCELLED')}>

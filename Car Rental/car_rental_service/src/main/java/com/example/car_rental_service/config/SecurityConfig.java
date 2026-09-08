@@ -71,7 +71,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/bookings/create")
                         .hasAuthority("CUSTOMER")
                         .requestMatchers(HttpMethod.PATCH, "/api/bookings/*/status")
-                        .hasAnyAuthority("ADMIN", "AGENCY")
+                        .hasAuthority("AGENCY")
                         .requestMatchers(HttpMethod.PATCH, "/api/bookings/*/cancel")
                         .hasAnyAuthority("ADMIN", "CUSTOMER")
 

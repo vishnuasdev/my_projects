@@ -3,9 +3,11 @@ package com.example.car_rental_service.model.entity.users;
 import com.example.car_rental_service.model.entity.Address;
 import com.example.car_rental_service.model.entity.User;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -23,12 +25,22 @@ public class Customer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "Date of Birth must use YYYY-MM-DD format")
     private String dob;
 
+    @Pattern(regexp = "^[A-Za-z0-9 -]{5,30}$", message = "Driving License Number contains invalid characters")
     private String licenseNo;
 
     @Size(max = 150)
     private String location;
+
+    @Transient
+    @JsonProperty("name")
+    private String profileName;
+
+    @Transient
+    @JsonProperty("phone")
+    private String profilePhone;
 
     private String imageType;
 

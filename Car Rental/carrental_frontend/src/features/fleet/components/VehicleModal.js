@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { API_BASE_URL } from '../../../config/constants';
 
 const initialFormState = {
     brand: '',
@@ -6,22 +7,38 @@ const initialFormState = {
     registrationNo: '',
     fuelType: 'Diesel',
     transmission: 'Manual',
+    type: 'SEDAN',
     dailyRate: '',
     description: '',
     isAvailable: true,
     agencyRemarks: '',
 };
 
-const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
+const getExistingImageCount = (vehicle) => Math.min(5, Math.max(
+    Number(vehicle?.imageCount || 0),
+    Array.isArray(vehicle?.images) ? vehicle.images.length : 0,
+    Array.isArray(vehicle?.carImage) ? vehicle.carImage.length : 0
+));
+
+const getExistingImageSource = (vehicle, index) => {
+    const embeddedImage = vehicle?.carImage?.[index];
+    return embeddedImage
+        ? `data:${vehicle.carImageType?.[index] || 'image/jpeg'};base64,${embeddedImage}`
+        : `${API_BASE_URL.replace(/\/$/, '')}/api/cars/${vehicle.id}/image/${index}`;
+};
+
+const VehicleModal = ({ isOpen, onClose, onSubmit, onDeleteImage, initialData }) => {
     const [carData, setCarData] = useState({ ...initialFormState, ...initialData });
     const [selectedImages, setSelectedImages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [deletingImage, setDeletingImage] = useState(null);
 
     useEffect(() => {
         setCarData({ ...initialFormState, ...initialData });
         setSelectedImages([]);
         setError('');
+        setDeletingImage(null);
     }, [initialData]);
 
     if (!isOpen) return null;
@@ -36,7 +53,7 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
 
     const handleFileChange = (e) => {
         const images = Array.from(e.target.files);
-        const existingImageCount = Number(initialData?.imageCount || 0);
+        const existingImageCount = getExistingImageCount(initialData);
         if (existingImageCount + images.length > 5) {
             setSelectedImages([]);
             setError(`A vehicle can have a maximum of 5 images. Select no more than ${Math.max(0, 5 - existingImageCount)} new image(s).`);
@@ -57,6 +74,23 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
         onClose();
     };
 
+    const handleDeleteImage = async (index) => {
+        if (!onDeleteImage || !initialData?.id || !window.confirm('Delete this vehicle image?')) return;
+        setDeletingImage(index);
+        setError('');
+        try {
+            await onDeleteImage(initialData.id, index);
+        } catch (err) {
+            const responseData = err.response?.data;
+            const message = typeof responseData === 'string'
+                ? responseData
+                : responseData?.message || responseData?.error;
+            setError(message || `Failed to delete vehicle image${err.response?.status ? ` (${err.response.status})` : '.'}`);
+        } finally {
+            setDeletingImage(null);
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -69,6 +103,7 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
             registrationNo: carData.registrationNo.trim().toUpperCase(),
             fuelType: carData.fuelType,
             transmission: carData.transmission,
+            type: carData.type || 'SEDAN',
             dailyRate: Number(carData.dailyRate),
             description: carData.description.trim(),
             isAvailable: Boolean(carData.isAvailable),
@@ -160,6 +195,33 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
 
                 {/* Form Body */}
                 <form onSubmit={handleSubmit} style={{ padding: '1.5rem', overflowY: 'auto' }}>
+                    {initialData?.id && getExistingImageCount(initialData) > 0 && (
+                        <div style={{ marginBottom: '1rem' }}>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.5rem' }}>
+                                Existing Images ({getExistingImageCount(initialData)})
+                            </label>
+                            <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+                                {Array.from({ length: getExistingImageCount(initialData) }, (_, index) => (
+                                    <div key={`${initialData.id}-${index}`} style={{ position: 'relative', width: '92px', height: '72px' }}>
+                                        <img
+                                            src={getExistingImageSource(initialData, index)}
+                                            alt={`Vehicle view ${index + 1}`}
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '5px', border: '1px solid #cbd5e1', background: '#f8fafc' }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDeleteImage(index)}
+                                            disabled={deletingImage === index}
+                                            aria-label={`Delete vehicle image ${index + 1}`}
+                                            style={{ position: 'absolute', top: '-6px', right: '-6px', width: '20px', height: '20px', border: 0, borderRadius: '50%', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: '0.75rem', lineHeight: 1 }}
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                         <div>
                             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: '#334155', marginBottom: '0.35rem' }}>
@@ -181,6 +243,23 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                                     boxSizing: 'border-box'
                                 }}
                             />
+                        </div>
+
+                        <div style={{ marginBottom: '1rem' }}>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: '#334155', marginBottom: '0.35rem' }}>
+                                Car Type
+                            </label>
+                            <select
+                                name="type"
+                                value={carData.type || 'SEDAN'}
+                                onChange={handleChange}
+                                style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem', backgroundColor: '#fff', boxSizing: 'border-box' }}
+                            >
+                                <option value="SEDAN">Sedan</option>
+                                <option value="SUV">SUV</option>
+                                <option value="HATCHBACK">Hatchback</option>
+                                <option value="LUXURY">Luxury</option>
+                            </select>
                         </div>
                         <div>
                             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: '#334155', marginBottom: '0.35rem' }}>
@@ -376,9 +455,9 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                                 {selectedImages.length} file(s) selected
                             </span>
                         )}
-                        {initialData?.imageCount > 0 && selectedImages.length === 0 && (
+                        {getExistingImageCount(initialData) > 0 && selectedImages.length === 0 && (
                             <span style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.35rem', display: 'block' }}>
-                                {initialData.imageCount} existing image(s) will be kept.
+                                {getExistingImageCount(initialData)} existing image(s) will be kept.
                             </span>
                         )}
                     </div>

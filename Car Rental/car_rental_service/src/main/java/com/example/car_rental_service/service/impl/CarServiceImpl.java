@@ -6,6 +6,7 @@ import com.example.car_rental_service.model.entity.users.Agency;
 import com.example.car_rental_service.model.entity.users.Owner;
 import com.example.car_rental_service.model.enums.BidStatus;
 import com.example.car_rental_service.repository.AgencyRepository;
+import com.example.car_rental_service.repository.BidRepository;
 import com.example.car_rental_service.repository.CarRepository;
 import com.example.car_rental_service.repository.OwnerRepository;
 import com.example.car_rental_service.service.CarService;
@@ -28,19 +29,23 @@ public class CarServiceImpl implements CarService {
     private final CarRepository carRepository;
     private final OwnerRepository ownerRepository;
     private final AgencyRepository agencyRepository;
+    private final BidRepository bidRepository;
 
     public CarServiceImpl(CarRepository carRepository,
                           OwnerRepository ownerRepository,
-                          AgencyRepository agencyRepository) {
+                          AgencyRepository agencyRepository,
+                          BidRepository bidRepository) {
         this.carRepository = carRepository;
         this.ownerRepository = ownerRepository;
         this.agencyRepository = agencyRepository;
+        this.bidRepository = bidRepository;
     }
 
     @Override
     public Car addCar(Car car, Long targetAgencyId, List<MultipartFile> images) throws IOException {
         Owner owner = getCurrentOwner();
         car.setOwner(owner);
+        car.setType(normalizeCarType(car.getType()));
         car.setAvailable(true);
         car.setBidStatus(BidStatus.PENDING);
 
@@ -64,6 +69,7 @@ public class CarServiceImpl implements CarService {
         car.setRegistrationNo(updatedCar.getRegistrationNo());
         car.setFuelType(updatedCar.getFuelType());
         car.setTransmission(updatedCar.getTransmission());
+        car.setType(normalizeCarType(updatedCar.getType()));
         car.setDailyRate(updatedCar.getDailyRate());
         car.setDescription(updatedCar.getDescription());
 
@@ -91,6 +97,9 @@ public class CarServiceImpl implements CarService {
 
         car.setBidStatus(status);
         car.setAgencyRemarks(remarks);
+        if (status == BidStatus.ACCEPTED) {
+            car.setAvailable(true);
+        }
         return carRepository.save(car);
     }
 
@@ -108,9 +117,39 @@ public class CarServiceImpl implements CarService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
+    public Car removeCarImage(Long carId, int index) {
+        Car car = carRepository.findByIdWithImages(carId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Car not found"));
+        validateOwnershipOrAdmin(car);
+        if (index < 0 || index >= car.getImages().size()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Image index out of bounds");
+        }
+        CarImage image = car.getImages().get(index);
+        car.removeImage(image);
+        carRepository.saveAndFlush(car);
+        return carRepository.findByIdWithImages(carId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Car not found"));
+    }
+
+    @Override
+    @Transactional
     public List<Car> getAllAvailableApprovedCars() {
-        return carRepository.findByIsAvailableTrueAndBidStatus(BidStatus.ACCEPTED);
+        List<Car> availableCars = carRepository.findAvailableCarsForApprovedAgencies(BidStatus.ACCEPTED);
+        availableCars.forEach(car -> bidRepository.findFirstByCarIdAndStatusOrderByIdDesc(car.getId(), BidStatus.ACCEPTED)
+                .ifPresent(acceptedBid -> {
+                    boolean needsSynchronization = car.getAgency() == null
+                            || !car.getAgency().getId().equals(acceptedBid.getAgency().getId())
+                            || car.getBidStatus() != BidStatus.ACCEPTED
+                            || !acceptedBid.getRatePerDay().equals(car.getDailyRate());
+                    if (needsSynchronization) {
+                        car.setAgency(acceptedBid.getAgency());
+                        car.setDailyRate(acceptedBid.getRatePerDay());
+                        car.setBidStatus(BidStatus.ACCEPTED);
+                        carRepository.save(car);
+                    }
+                }));
+        return availableCars;
     }
 
     @Override
@@ -138,6 +177,19 @@ public class CarServiceImpl implements CarService {
     public Car getCarById(Long id) {
         return carRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Car not found with ID: " + id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Car getPublicCarById(Long id) {
+        Car car = getCarById(id);
+        if (car.getAgency() == null
+                || car.getAgency().getStatus() != com.example.car_rental_service.model.enums.AgencyStatus.APPROVED
+                || !car.isAvailable()
+                || car.getBidStatus() != BidStatus.ACCEPTED) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Car not found");
+        }
+        return car;
     }
 
     @Override
@@ -183,6 +235,10 @@ public class CarServiceImpl implements CarService {
                 }
             }
         }
+    }
+
+    private String normalizeCarType(String type) {
+        return type == null || type.isBlank() ? "SEDAN" : type.trim().toUpperCase();
     }
 
     private Owner getCurrentOwner() {

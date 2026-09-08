@@ -154,7 +154,7 @@ public class CustomerController {
     @PostMapping("/request/{carId}")
     public ResponseEntity<Booking> createBookingRequest(
             @PathVariable @Positive Long carId,
-            @Valid @RequestBody Booking bookingRequest) {
+            @RequestBody Booking bookingRequest) {
         Booking createdBooking = bookingService.createBookingRequest(carId, bookingRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdBooking);
     }

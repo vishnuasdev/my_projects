@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getToken } from './tokenStorage';
+import { getToken, removeToken } from './tokenStorage';
 
 const axiosInstance = axios.create({
   baseURL: 'http://localhost:8080/api',
@@ -27,6 +27,11 @@ axiosInstance.interceptors.response.use(
     return response;
   },
   (error) => {
+    if (error.response?.status === 401) {
+      removeToken();
+      window.dispatchEvent(new Event('auth:expired'));
+    }
+
     // A failed dashboard request must not destroy an otherwise valid local session.
     if (!error.response || error.response.status >= 500) {
       window.dispatchEvent(new Event('backend:offline'));

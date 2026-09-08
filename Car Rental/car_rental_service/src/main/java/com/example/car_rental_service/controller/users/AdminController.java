@@ -25,6 +25,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -50,6 +53,42 @@ public class AdminController {
         this.bookingService = bookingService;
         this.agencyService = agencyService;
         this.ownerService = ownerService;
+    }
+
+    // ==========================================
+    // 0. ADMIN SUMMARY
+    // ==========================================
+
+    @GetMapping("/summary")
+    public ResponseEntity<Map<String, Object>> getSummary() {
+        List<User> users = userService.getAllUsers();
+        List<Agency> agencies = agencyService.getAllAgencies();
+        List<Car> cars = carService.getAllCars();
+        List<Booking> bookings = bookingService.getAllBookings();
+        List<Bid> bids = bidService.getAllBids();
+
+        double revenue = bookings.stream()
+                .filter(booking -> booking.getStatus() == BookingStatus.CONFIRMED
+                        || booking.getStatus() == BookingStatus.COMPLETED)
+                .map(Booking::getTotalCost)
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("totalUsers", users.size());
+        summary.put("activeUsers", users.stream().filter(user -> user.getStatus() == UserStatus.ACTIVE).count());
+        summary.put("totalAgencies", agencies.size());
+        summary.put("pendingAgencies", agencies.stream().filter(agency -> agency.getStatus() == AgencyStatus.PENDING).count());
+        summary.put("approvedAgencies", agencies.stream().filter(agency -> agency.getStatus() == AgencyStatus.APPROVED).count());
+        summary.put("totalCars", cars.size());
+        summary.put("activeFleet", cars.stream().filter(Car::isAvailable).count());
+        summary.put("totalBookings", bookings.size());
+        summary.put("pendingBookings", bookings.stream().filter(booking -> booking.getStatus() == BookingStatus.PENDING).count());
+        summary.put("totalBids", bids.size());
+        summary.put("pendingBids", bids.stream().filter(bid -> bid.getStatus() == com.example.car_rental_service.model.enums.BidStatus.PENDING).count());
+        summary.put("totalRevenue", revenue);
+        return ResponseEntity.ok(summary);
     }
 
     // ==========================================

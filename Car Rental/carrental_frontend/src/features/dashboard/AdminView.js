@@ -4,6 +4,34 @@ import { fleetApi } from '../fleet/api/fleetApi';
 import VehicleModal from '../fleet/components/VehicleModal';
 import { adminApi } from '../admin/api/adminApi';
 
+const formatDetailLabel = (key) => key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]/g, ' ')
+    .replace(/\b\w/g, character => character.toUpperCase());
+
+const formatDetailValue = (value) => {
+    if (value === null || value === undefined || value === '') return 'Not provided';
+    if (Array.isArray(value)) return value.length ? `${value.length} item(s)` : 'None';
+    if (typeof value === 'object') {
+        const name = value.name || value.email || value.brand || value.model || value.id;
+        return name ? String(name) : 'Details available';
+    }
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    return String(value);
+};
+
+const getViewEntries = (data, type) => {
+    const preferredCarFields = [
+        'id', 'brand', 'model', 'registrationNo', 'fuelType', 'transmission',
+        'dailyRate', 'description', 'isAvailable', 'bidStatus', 'agencyRemarks',
+        'imageCount', 'owner', 'agency'
+    ];
+    const keys = type === 'CARS'
+        ? preferredCarFields.filter(key => Object.prototype.hasOwnProperty.call(data, key))
+        : Object.keys(data);
+    return keys.filter(key => !['images', 'available'].includes(key));
+};
+
 const AdminView = () => {
     const [activeTab, setActiveTab] = useState('USERS');
     
@@ -28,15 +56,12 @@ const AdminView = () => {
     const [cars, setCars] = useState([]);
     const [bookings, setBookings] = useState([]);
     const [bids, setBids] = useState([]);
+    const [summary, setSummary] = useState(null);
     const [bookingId, setBookingId] = useState('');
     const [agencyId, setAgencyId] = useState('');
 
-    useEffect(() => {
-        fetchTabData(activeTab);
-    }, [activeTab]);
-
-    const fetchTabData = async (tab) => {
-        setIsLoading(true);
+    const fetchTabData = async (tab, { silent = false } = {}) => {
+        if (!silent) setIsLoading(true);
         setError('');
         try {
             if (tab === 'USERS') {
@@ -53,9 +78,40 @@ const AdminView = () => {
         } catch (err) {
             setError(`Failed to fetch ${tab.toLowerCase()} data.`);
         } finally {
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     };
+
+    const fetchSummary = async ({ silent = false } = {}) => {
+        try {
+            setSummary(await adminApi.getSummary());
+        } catch (err) {
+            if (!silent) {
+                setError('Summary metrics are temporarily unavailable. Showing current records.');
+            }
+        }
+    };
+
+    useEffect(() => {
+        fetchTabData(activeTab);
+        fetchSummary();
+
+        const refresh = () => {
+            if (document.visibilityState === 'visible') {
+                fetchTabData(activeTab, { silent: true });
+                fetchSummary({ silent: true });
+            }
+        };
+        const intervalId = window.setInterval(refresh, 15000);
+        window.addEventListener('focus', refresh);
+        document.addEventListener('visibilitychange', refresh);
+
+        return () => {
+            window.clearInterval(intervalId);
+            window.removeEventListener('focus', refresh);
+            document.removeEventListener('visibilitychange', refresh);
+        };
+    }, [activeTab]);
 
     // Generic Delete Handler
     const handleDeleteItem = async (id, tabName) => {
@@ -70,10 +126,11 @@ const AdminView = () => {
             } else {
                 await adminApi.removeBid(id);
             }
-            if (tabName === 'USERS') setUsers(users.filter(item => item.id !== id));
-            if (tabName === 'AGENCIES') setAgencies(agencies.filter(item => item.id !== id));
-            if (tabName === 'CARS') setCars(cars.filter(item => item.id !== id));
-            if (tabName === 'BIDS') setBids(bids.filter(item => item.id !== id));
+            if (tabName === 'USERS') setUsers(current => current.filter(item => item.id !== id));
+            if (tabName === 'AGENCIES') setAgencies(current => current.filter(item => item.id !== id));
+            if (tabName === 'CARS') setCars(current => current.filter(item => item.id !== id));
+            if (tabName === 'BIDS') setBids(current => current.filter(item => item.id !== id));
+            fetchSummary({ silent: true });
         } catch (err) {
             alert(`Failed to delete item from ${tabName}.`);
         }
@@ -82,7 +139,8 @@ const AdminView = () => {
     const handleUpdateBidStatus = async (bidId, newStatus) => {
         try {
             await adminApi.updateBidStatus(bidId, newStatus);
-            setBids(bids.map(b => b.id === bidId ? { ...b, status: newStatus } : b));
+            setBids(current => current.map(b => b.id === bidId ? { ...b, status: newStatus } : b));
+            fetchSummary({ silent: true });
         } catch (err) {
             alert('Failed to update bid status.');
         }
@@ -91,7 +149,8 @@ const AdminView = () => {
     const handleUpdateUserStatus = async (userId, status) => {
         try {
             const updatedUser = await adminApi.updateUserStatus(userId, status);
-            setUsers(users.map(user => user.id === userId ? updatedUser : user));
+            setUsers(current => current.map(user => user.id === userId ? updatedUser : user));
+            fetchSummary({ silent: true });
         } catch (err) {
             alert('Failed to update user status.');
         }
@@ -100,7 +159,8 @@ const AdminView = () => {
     const handleUpdateBookingStatus = async (bookingIdValue, status) => {
         try {
             const updatedBooking = await adminApi.updateBookingStatus(bookingIdValue, status);
-            setBookings(bookings.map(booking => booking.id === bookingIdValue ? updatedBooking : booking));
+            setBookings(current => current.map(booking => booking.id === bookingIdValue ? updatedBooking : booking));
+            fetchSummary({ silent: true });
         } catch (err) {
             alert('Failed to update booking status.');
         }
@@ -112,9 +172,9 @@ const AdminView = () => {
             : await adminApi.createCar(carData, null, images);
 
         if (updatedCar?.id) {
-            setCars(editingCar
-                ? cars.map(car => car.id === updatedCar.id ? updatedCar : car)
-                : [updatedCar, ...cars]);
+            setCars(current => editingCar
+                ? current.map(car => car.id === updatedCar.id ? updatedCar : car)
+                : [updatedCar, ...current]);
         } else {
             await fetchTabData('CARS');
         }
@@ -185,17 +245,20 @@ const AdminView = () => {
     };
 
     const stats = {
-        totalUsers: users.length,
-        activeFleet: cars.filter(car => car.isAvailable).length,
-        totalBookings: bookings.length,
-        totalRevenue: null,
+        totalUsers: summary?.totalUsers ?? users.length,
+        activeFleet: summary?.activeFleet ?? cars.filter(car => car.isAvailable).length,
+        totalBookings: summary?.totalBookings ?? bookings.length,
+        totalRevenue: summary?.totalRevenue ?? null,
+        pendingAgencies: summary?.pendingAgencies ?? agencies.filter(agency => agency.status === 'PENDING').length,
+        pendingBookings: summary?.pendingBookings ?? bookings.filter(booking => booking.status === 'PENDING').length,
+        pendingBids: summary?.pendingBids ?? bids.filter(bid => bid.status === 'PENDING').length,
     };
 
     // Filtered Records
     const filteredUsers = users.filter(u => userRoleFilter === 'ALL' || u.role === userRoleFilter);
     const filteredAgencies = agencies.filter(a => agencyFilter === 'ALL' || a.status === agencyFilter);
     const filteredBookings = bookings.filter(b => bookingStatusFilter === 'ALL' || b.status === bookingStatusFilter);
-    const filteredCars = cars.filter(v => vehicleCategoryFilter === 'ALL' || v.type === vehicleCategoryFilter);
+    const filteredCars = cars.filter(v => vehicleCategoryFilter === 'ALL' || (v.type || 'SEDAN') === vehicleCategoryFilter);
     const filteredBids = bids.filter(b => bidStatusFilter === 'ALL' || b.status === bidStatusFilter);
 
     // Style Helpers
@@ -245,6 +308,20 @@ const AdminView = () => {
                     <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Total Users</span>
                     <h3 style={{ margin: '0.25rem 0 0 0', color: '#1e293b' }}>{stats.totalUsers}</h3>
                 </div>
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+                {[
+                    ['Pending agency approvals', stats.pendingAgencies],
+                    ['Pending bookings', stats.pendingBookings],
+                    ['Pending bids', stats.pendingBids]
+                ].map(([label, value]) => (
+                    <div key={label} style={{ padding: '0.55rem 0.8rem', borderRadius: '999px', background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', fontSize: '0.8rem', fontWeight: 600 }}>
+                        {label}: {value}
+                    </div>
+                ))}
+                <button type="button" onClick={() => { setSummary(null); adminApi.getSummary().then(setSummary).catch(() => setError('Summary metrics are temporarily unavailable.')); }} style={{ marginLeft: 'auto', padding: '0.5rem 0.8rem', border: '1px solid #cbd5e1', borderRadius: '6px', background: '#fff', color: '#334155', cursor: 'pointer' }}>
+                    Refresh metrics
+                </button>
+            </div>
                 <div style={{ padding: '1rem 1.25rem', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                     <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Active Fleet</span>
                     <h3 style={{ margin: '0.25rem 0 0 0', color: '#2563eb' }}>{stats.activeFleet}</h3>
@@ -602,7 +679,7 @@ const AdminView = () => {
             {/* --- ACTION MODAL DIALOG (VIEW & EDIT) --- */}
             {activeModal.type && activeModal.data && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                    <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', width: '100%', maxWidth: '450px', padding: '1.5rem', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+                    <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', width: '100%', maxWidth: '520px', maxHeight: '85vh', overflowY: 'auto', padding: '1.5rem', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
                             <h4 style={{ margin: 0, color: '#0f172a' }}>{activeModal.type === 'VIEW' ? 'View Details' : 'Edit Information'}</h4>
                             <button onClick={() => setActiveModal({ type: null, data: null })} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#64748b' }}>&times;</button>
@@ -610,10 +687,12 @@ const AdminView = () => {
 
                         {activeModal.type === 'VIEW' ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.875rem' }}>
-                                {Object.entries(activeModal.data).map(([key, value]) => (
+                                {getViewEntries(activeModal.data, activeTab).map((key) => (
                                     <div key={key} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #f1f5f9', paddingBottom: '0.25rem' }}>
-                                        <span style={{ color: '#64748b', fontWeight: '500' }}>{key}:</span>
-                                        <span style={{ color: '#0f172a', fontWeight: '600' }}>{String(value)}</span>
+                                        <span style={{ color: '#64748b', fontWeight: '500' }}>{formatDetailLabel(key)}:</span>
+                                        <span style={{ color: '#0f172a', fontWeight: '600', textAlign: 'right', maxWidth: '60%', overflowWrap: 'anywhere' }}>
+                                            {formatDetailValue(activeModal.data[key])}
+                                        </span>
                                     </div>
                                 ))}
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>

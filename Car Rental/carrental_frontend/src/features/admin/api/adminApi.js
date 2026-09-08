@@ -1,6 +1,7 @@
 import API from '../../../services/axiosInstance';
 
 export const adminApi = {
+    getSummary: async () => (await API.get('/admin/summary')).data,
     getUsers: async () => (await API.get('/admin/users')).data,
     getUser: async (id) => (await API.get(`/admin/users/${id}`)).data,
     getUserByEmail: async (email) => (await API.get('/admin/users/email', { params: { email } })).data,

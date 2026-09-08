@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import PublicView from './PublicView';
 import { useAuth } from '../auth/hooks/useAuth';
 import { bookingApi } from '../bookings/api/bookingApi';
@@ -7,30 +7,41 @@ import Spinner from '../../components/feedback/Spinner';
 
 const CustomerView = () => {
     const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState('CATALOG'); // 'CATALOG' | 'BOOKINGS'
     const [bookings, setBookings] = useState([]);
     const [loadingBookings, setLoadingBookings] = useState(true);
     const [bookingsError, setBookingsError] = useState('');
     const [bookingFilter, setBookingFilter] = useState('ALL');
     const [cancellingId, setCancellingId] = useState(null);
+    const bookingsRequestId = useRef(0);
 
-    const fetchBookings = async () => {
+    const fetchBookings = useCallback(async () => {
+        const requestId = ++bookingsRequestId.current;
         setBookingsError('');
         setLoadingBookings(true);
         try {
-            setBookings(await bookingApi.getCustomerBookings());
+            const data = await bookingApi.getCustomerBookings();
+            if (requestId === bookingsRequestId.current) {
+                setBookings(data || []);
+            }
         } catch (error) {
             console.error('Error fetching customer bookings:', error);
-            setBookingsError('Unable to load your bookings. Please try again.');
+            if (requestId === bookingsRequestId.current) {
+                setBookingsError('Unable to load your bookings. Please try again.');
+            }
         } finally {
-            setLoadingBookings(false);
+            if (requestId === bookingsRequestId.current) {
+                setLoadingBookings(false);
+            }
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchBookings();
-    }, [user]);
+    }, [fetchBookings, user?.id]);
 
     const handleCancelBooking = async (bookingId) => {
+        if (cancellingId) return;
         if (!window.confirm('Cancel this booking request?')) return;
         setCancellingId(bookingId);
         try {
@@ -43,117 +54,157 @@ const CustomerView = () => {
         }
     };
 
-    const bookingCounts = bookings.reduce((counts, booking) => {
-        const status = String(booking.status || 'PENDING').toUpperCase();
-        counts[status] = (counts[status] || 0) + 1;
-        return counts;
-    }, {});
-    const visibleBookings = bookingFilter === 'ALL'
-        ? bookings
-        : bookings.filter(booking => String(booking.status || 'PENDING').toUpperCase() === bookingFilter);
+    const bookingCounts = useMemo(() => {
+        return bookings.reduce((counts, booking) => {
+            const status = String(booking.status || 'PENDING').toUpperCase();
+            counts[status] = (counts[status] || 0) + 1;
+            return counts;
+        }, {});
+    }, [bookings]);
+
+    const visibleBookings = useMemo(() => {
+        if (bookingFilter === 'ALL') return bookings;
+        return bookings.filter(booking => String(booking.status || 'PENDING').toUpperCase() === bookingFilter);
+    }, [bookings, bookingFilter]);
 
     const customerName = user?.name || user?.fullName || user?.email?.split('@')[0] || 'there';
 
-    // CustomerView is the same as PublicView, just shown to logged-in customers
-    // The user object is available for any customer-specific logic in the future
-    // For now, they see the exact same vehicle browsing interface
-    
     return (
-        <div className="customer-dashboard">
-            <style>{`
-                .customer-dashboard {
-                    min-height: 100vh;
-                    background: #f6f8fb;
-                    color: #172033;
-                }
-
-                .customer-welcome {
-                    max-width: 1200px;
-                    margin: 0 auto;
-                    padding: 1.75rem 1rem 0;
-                }
-
-                .customer-welcome-panel {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    gap: 1rem;
-                    padding: 1.25rem 1.5rem;
-                    border: 1px solid #dbe4f0;
-                    border-radius: 12px;
-                    background: linear-gradient(110deg, #ffffff 0%, #eef6ff 100%);
-                    box-shadow: 0 8px 24px rgba(30, 64, 175, 0.06);
-                }
-
-                .customer-summary {
-                    display: flex;
-                    gap: 0.5rem;
-                    flex-wrap: wrap;
-                    margin-top: 0.75rem;
-                }
-
-                .customer-summary span {
-                    padding: 0.35rem 0.65rem;
-                    border-radius: 999px;
-                    background: #ffffff;
-                    border: 1px solid #dbe4f0;
-                    color: #526176;
-                    font-size: 0.75rem;
-                    font-weight: 600;
-                }
-
-                .customer-section-heading {
-                    display: flex;
-                    align-items: end;
-                    justify-content: space-between;
-                    gap: 1rem;
-                }
-
-                @media (max-width: 640px) {
-                    .customer-welcome { padding-top: 1rem; }
-                    .customer-welcome-panel { align-items: flex-start; flex-direction: column; padding: 1rem; }
-                    .customer-section-heading { align-items: flex-start; flex-direction: column; }
-                }
-            `}</style>
-            <header className="customer-welcome">
-                <div className="customer-welcome-panel">
+        <div style={{ minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+            
+            {/* Header Banner */}
+            <header style={{ maxWidth: '1280px', margin: '0 auto', padding: '1.5rem 1rem 0' }}>
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justify: 'space-between',
+                    gap: '1rem',
+                    padding: '1.25rem 1.5rem',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    background: '#ffffff',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                    flexWrap: 'wrap'
+                }}>
                     <div>
-                        <p style={{ margin: 0, color: '#2563eb', fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Customer dashboard</p>
-                        <h1 style={{ margin: '0.3rem 0 0', fontSize: '1.55rem', lineHeight: 1.2 }}>Welcome, {customerName}</h1>
-                        <p style={{ margin: '0.45rem 0 0', color: '#5f6f85', fontSize: '0.9rem' }}>Find a car, choose your dates, and keep every booking in one place.</p>
-                        <div className="customer-summary">
-                            <span>{bookings.length} total booking{bookings.length === 1 ? '' : 's'}</span>
-                            <span>{bookingCounts.PENDING || 0} awaiting approval</span>
-                            <span>{bookingCounts.APPROVED || 0} approved</span>
+                        <p style={{ margin: 0, color: '#2563eb', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Customer Dashboard</p>
+                        <h1 style={{ margin: '0.25rem 0 0', fontSize: '1.5rem', fontWeight: 700, color: '#0f172a' }}>Welcome, {customerName}</h1>
+                        <p style={{ margin: '0.35rem 0 0', color: '#64748b', fontSize: '0.875rem' }}>Find a vehicle, select dates, and track your active reservations.</p>
+                        
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
+                            <span style={{ padding: '0.25rem 0.65rem', borderRadius: '9999px', background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#334155', fontSize: '0.75rem', fontWeight: 600 }}>
+                                {bookings.length} Total Bookings
+                            </span>
+                            <span style={{ padding: '0.25rem 0.65rem', borderRadius: '9999px', background: '#fef3c7', border: '1px solid #fcd34d', color: '#b45309', fontSize: '0.75rem', fontWeight: 600 }}>
+                                {bookingCounts.PENDING || 0} Awaiting Approval
+                            </span>
+                            <span style={{ padding: '0.25rem 0.65rem', borderRadius: '9999px', background: '#dcfce7', border: '1px solid #86efac', color: '#15803d', fontSize: '0.75rem', fontWeight: 600 }}>
+                                {bookingCounts.APPROVED || bookingCounts.CONFIRMED || 0} Approved
+                            </span>
                         </div>
                     </div>
-                    <div style={{ minWidth: '92px', textAlign: 'center', padding: '0.75rem', borderRadius: '10px', background: '#2563eb', color: '#ffffff' }}>
-                        <strong style={{ display: 'block', fontSize: '1.5rem', lineHeight: 1 }}>{bookings.length}</strong>
-                        <span style={{ display: 'block', marginTop: '0.35rem', fontSize: '0.72rem' }}>bookings</span>
+
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button 
+                            onClick={() => setActiveTab('CATALOG')}
+                            style={{
+                                padding: '0.6rem 1.1rem',
+                                borderRadius: '8px',
+                                border: '1px solid',
+                                borderColor: activeTab === 'CATALOG' ? '#2563eb' : '#cbd5e1',
+                                background: activeTab === 'CATALOG' ? '#2563eb' : '#fff',
+                                color: activeTab === 'CATALOG' ? '#fff' : '#334155',
+                                fontWeight: 600,
+                                fontSize: '0.875rem',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Browse Vehicles
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('BOOKINGS')}
+                            style={{
+                                padding: '0.6rem 1.1rem',
+                                borderRadius: '8px',
+                                border: '1px solid',
+                                borderColor: activeTab === 'BOOKINGS' ? '#2563eb' : '#cbd5e1',
+                                background: activeTab === 'BOOKINGS' ? '#2563eb' : '#fff',
+                                color: activeTab === 'BOOKINGS' ? '#fff' : '#334155',
+                                fontWeight: 600,
+                                fontSize: '0.875rem',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            My Bookings ({bookings.length})
+                        </button>
                     </div>
                 </div>
             </header>
-            <PublicView isCustomerView={true} user={user} />
-            <section style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem 1rem 3rem' }}>
-                <div className="customer-section-heading" style={{ borderBottom: '2px solid #e2e8f0', paddingBottom: '0.75rem' }}>
-                    <div>
-                        <h2 style={{ margin: 0 }}>My Bookings</h2>
-                        <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.875rem' }}>Track requests, approvals, and completed rentals.</p>
-                    </div>
-                    <button type="button" onClick={fetchBookings} disabled={loadingBookings} style={{ padding: '0.5rem 0.8rem', border: '1px solid #cbd5e1', borderRadius: '6px', background: '#fff', color: '#334155', cursor: loadingBookings ? 'wait' : 'pointer' }}>
-                        {loadingBookings ? 'Refreshing...' : 'Refresh'}
-                    </button>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', margin: '1rem 0' }}>
-                    {['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'COMPLETED'].map(status => (
-                        <button key={status} type="button" onClick={() => setBookingFilter(status)} style={{ padding: '0.4rem 0.7rem', border: '1px solid #cbd5e1', borderRadius: '999px', background: bookingFilter === status ? '#2563eb' : '#fff', color: bookingFilter === status ? '#fff' : '#475569', cursor: 'pointer', fontSize: '0.8rem' }}>
-                            {status} ({status === 'ALL' ? bookings.length : bookingCounts[status] || 0})
-                        </button>
-                    ))}
-                </div>
-                {bookingsError && <div style={{ padding: '0.75rem 1rem', marginBottom: '1rem', color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px' }}>{bookingsError}</div>}
-                {loadingBookings ? <Spinner /> : <BookingTable bookings={visibleBookings} onStatusUpdate={handleCancelBooking} cancellingId={cancellingId} />}
-            </section>
+
+            {/* Main Content Sections */}
+            <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '1rem' }}>
+                {activeTab === 'CATALOG' ? (
+                    <PublicView isCustomerView={true} user={user} />
+                ) : (
+                    <section style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.5rem', marginTop: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                            <div>
+                                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#0f172a' }}>My Bookings</h2>
+                                <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.875rem' }}>Track rental requests, approvals, and trip history.</p>
+                                <p style={{ margin: '0.5rem 0 0', color: '#92400e', fontSize: '0.8rem' }}>Pending requests are not confirmed until the assigned agency accepts them.</p>
+                            </div>
+                            <button 
+                                type="button" 
+                                onClick={fetchBookings} 
+                                disabled={loadingBookings} 
+                                style={{ padding: '0.5rem 0.9rem', border: '1px solid #cbd5e1', borderRadius: '6px', background: '#fff', color: '#334155', cursor: loadingBookings ? 'wait' : 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                            >
+                                {loadingBookings ? 'Refreshing...' : 'Refresh Bookings'}
+                            </button>
+                        </div>
+
+                        {/* Status Filters */}
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', margin: '1.25rem 0' }}>
+                            {['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'COMPLETED'].map(status => (
+                                <button 
+                                    key={status} 
+                                    type="button" 
+                                    onClick={() => setBookingFilter(status)} 
+                                    style={{ 
+                                        padding: '0.4rem 0.8rem', 
+                                        border: '1px solid', 
+                                        borderColor: bookingFilter === status ? '#2563eb' : '#cbd5e1', 
+                                        borderRadius: '9999px', 
+                                        background: bookingFilter === status ? '#2563eb' : '#fff', 
+                                        color: bookingFilter === status ? '#fff' : '#475569', 
+                                        cursor: 'pointer', 
+                                        fontSize: '0.8rem',
+                                        fontWeight: 600
+                                    }}
+                                >
+                                    {status} ({status === 'ALL' ? bookings.length : bookingCounts[status] || 0})
+                                </button>
+                            ))}
+                        </div>
+
+                        {bookingsError && (
+                            <div role="alert" style={{ padding: '0.75rem 1rem', marginBottom: '1rem', color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px' }}>
+                                {bookingsError}
+                            </div>
+                        )}
+
+                        {loadingBookings ? (
+                            <Spinner />
+                        ) : (
+                            <BookingTable 
+                                bookings={visibleBookings} 
+                                onStatusUpdate={handleCancelBooking} 
+                                cancellingId={cancellingId} 
+                            />
+                        )}
+                    </section>
+                )}
+            </main>
         </div>
     );
 };

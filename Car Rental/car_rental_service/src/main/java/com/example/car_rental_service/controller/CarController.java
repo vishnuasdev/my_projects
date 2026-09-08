@@ -87,7 +87,7 @@ public class CarController {
 
     @GetMapping("/{id}")
     public ResponseEntity<Car> getCarById(@PathVariable @Positive Long id) {
-        return ResponseEntity.ok(carService.getCarById(id));
+        return ResponseEntity.ok(carService.getPublicCarById(id));
     }
 
     @PatchMapping("/{id}/availability")

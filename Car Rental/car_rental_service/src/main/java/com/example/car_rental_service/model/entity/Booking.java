@@ -24,6 +24,9 @@ public class Booking {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    private Long version;
+
     @NotNull
     @DecimalMin(value = "0.01")
     private Double ratePerDay;

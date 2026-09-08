@@ -19,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/agency")
@@ -153,6 +154,18 @@ public class AgencyController {
     // Update bid status (e.g., ACCEPTED, REJECTED, WAITING)
     @PatchMapping("/bids/{id}/status")
     public ResponseEntity<Bid> updateBidStatus(@PathVariable Long id, @RequestParam String status) {
+        Bid bid = bidService.getBidById(id)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Bid not found"));
+        Agency agency = agencyService.getMyProfile();
+        if (agency.getStatus() != com.example.car_rental_service.model.enums.AgencyStatus.APPROVED) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "Only approved agencies can update bids.");
+        }
+        if (bid.getAgency() == null || !Objects.equals(bid.getAgency().getId(), agency.getId())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "You can only update bids assigned to your agency.");
+        }
         return bidService.updateBidStatus(id, status)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());

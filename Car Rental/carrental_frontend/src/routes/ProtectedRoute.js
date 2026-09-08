@@ -3,7 +3,7 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import Spinner from '../components/feedback/Spinner';
 
-const ProtectedRoute = ({ allowedRoles, publicOnly = false, children }) => {
+const ProtectedRoute = ({ allowedRoles, publicOnly = false, allowAuthenticated = false, children }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -33,7 +33,7 @@ const ProtectedRoute = ({ allowedRoles, publicOnly = false, children }) => {
   };
 
   // 1. Logged-in user trying to access public-only routes (e.g., /login or /register)
-  if (publicOnly && user) {
+  if (publicOnly && user && !allowAuthenticated) {
     return <Navigate to={getDashboardPath(userRole)} replace />;
   }
 

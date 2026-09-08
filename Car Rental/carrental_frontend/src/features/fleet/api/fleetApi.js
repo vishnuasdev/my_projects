@@ -41,6 +41,10 @@ export const fleetApi = {
         const response = await API.put(`/owner/cars/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
         return response.data;
     },
+    deleteVehicleImage: async (id, index) => {
+        const response = await API.delete(`/owner/cars/${id}/images/${index}`);
+        return response.data;
+    },
 
     toggleAvailability: async (id, isAvailable) => {
         const response = await API.patch(`/owner/cars/${id}/availability`, null, { params: { isAvailable } });

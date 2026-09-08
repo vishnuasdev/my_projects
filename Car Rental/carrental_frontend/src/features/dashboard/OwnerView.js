@@ -127,6 +127,13 @@ const OwnerView = () => {
         }
     };
 
+    const handleDeleteVehicleImage = async (vehicleId, imageIndex) => {
+        const updated = await fleetApi.deleteVehicleImage(vehicleId, imageIndex);
+        setMyVehicles(prev => prev.map(vehicle => vehicle.id === vehicleId ? updated : vehicle));
+        setEditingVehicle(updated);
+        showNotification('success', 'Vehicle image deleted.');
+    };
+
     const handleToggleAvailability = async (vehicle) => {
         const nextState = !vehicle.isAvailable;
         // Optimistic UI Update
@@ -179,7 +186,8 @@ const OwnerView = () => {
     // Marketplace Bid Submission
     const handlePlaceBid = async (e) => {
         e.preventDefault();
-        if (!selectedVehicleForBid || !bidAmount) {
+        const parsedBidAmount = Number(bidAmount);
+        if (!selectedVehicleForBid || !Number.isFinite(parsedBidAmount) || parsedBidAmount <= 0) {
             showNotification('error', 'Please select a vehicle and enter a daily rate.');
             return;
         }
@@ -194,23 +202,27 @@ const OwnerView = () => {
         setSubmittingBid(true);
         try {
             const targetAgencyIds = bidToAllAgencies
-                ? agencies.map(agency => agency.id).filter(Boolean)
-                : [selectedAgencyForBid];
+                ? agencies.map(agency => Number(agency.id)).filter(Number.isInteger)
+                : [Number(selectedAgencyForBid)].filter(Number.isInteger);
+            if (targetAgencyIds.length === 0) {
+                showNotification('error', 'No valid agency was selected.');
+                return;
+            }
             const bidResults = await Promise.allSettled(
                 targetAgencyIds.map(agencyId => ownerApi.placeBid({
-                    carId: selectedVehicleForBid,
+                    carId: Number(selectedVehicleForBid),
                     agencyId,
-                    ratePerDay: parseFloat(bidAmount),
-                    status: 'PENDING'
+                    ratePerDay: parsedBidAmount
                 }))
             );
             const successfulBids = bidResults
                 .filter(result => result.status === 'fulfilled' && result.value)
                 .map(result => result.value);
             const failedCount = bidResults.filter(result => result.status === 'rejected').length;
+            const firstFailure = bidResults.find(result => result.status === 'rejected')?.reason;
 
             if (successfulBids.length > 0) {
-                setMyBids(prev => [...successfulBids.reverse(), ...prev]);
+                setMyBids(prev => [...successfulBids].reverse().concat(prev));
             } else {
                 await fetchOwnerData();
             }
@@ -221,13 +233,18 @@ const OwnerView = () => {
                     ? `Bid submitted successfully to all ${successfulBids.length} agencies.`
                     : 'Bid submitted successfully to the agency!');
             } else {
-                showNotification('error', 'The bid could not be submitted to any selected agency.');
+                showNotification('error', getRequestErrorMessage(
+                    firstFailure || new Error('No bid request succeeded.'),
+                    'The bid could not be submitted to any selected agency'
+                ));
             }
-            setBidAmount('');
-            setSelectedVehicleForBid('');
-            setSelectedAgencyForBid('');
-            setAgencySearch('');
-            setBidToAllAgencies(false);
+            if (successfulBids.length > 0) {
+                setBidAmount('');
+                setSelectedVehicleForBid('');
+                setSelectedAgencyForBid('');
+                setAgencySearch('');
+                setBidToAllAgencies(false);
+            }
         } catch (err) {
             showNotification('error', getRequestErrorMessage(err, 'Failed to submit bid.'));
         } finally {
@@ -276,12 +293,39 @@ const OwnerView = () => {
                 .owner-dashboard .dashboard-tab { white-space: nowrap; }
                 .owner-dashboard .dashboard-surface { box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04); }
                 .owner-dashboard .dashboard-workspace { grid-template-columns: 320px minmax(0, 1fr) !important; }
-                .owner-dashboard .owner-vehicle-grid {
-                    grid-template-columns: repeat(auto-fill, minmax(260px, 320px)) !important;
-                    justify-content: start;
-                    align-items: start;
+                .owner-dashboard .dashboard-workspace > * { min-width: 0; }
+                .owner-dashboard .dashboard-tab:focus-visible,
+                .owner-dashboard button:focus-visible,
+                .owner-dashboard input:focus-visible,
+                .owner-dashboard select:focus-visible {
+                    outline: 3px solid rgba(37, 99, 235, 0.35);
+                    outline-offset: 2px;
                 }
-                .owner-dashboard .owner-vehicle-actions { flex-wrap: wrap; }
+                .owner-dashboard .owner-vehicle-grid {
+                    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
+                    align-items: stretch;
+                }
+                .owner-dashboard .owner-vehicle-shell {
+                    display: flex;
+                    flex-direction: column;
+                    min-width: 0;
+                }
+                .owner-dashboard .owner-vehicle-shell .car-card {
+                    flex: 1;
+                    border-radius: 12px 12px 0 0 !important;
+                }
+                .owner-dashboard .owner-vehicle-shell .vehicle-image-container {
+                    height: 150px !important;
+                }
+                .owner-dashboard .owner-vehicle-shell .car-details {
+                    padding: 0.65rem !important;
+                }
+                .owner-dashboard .owner-vehicle-actions {
+                    flex-wrap: wrap;
+                    justify-content: flex-start !important;
+                    min-height: 62px;
+                    box-sizing: border-box;
+                }
                 @media (max-width: 700px) {
                     .owner-dashboard { padding: 1.25rem 1rem 3rem !important; }
                     .owner-dashboard .dashboard-header { align-items: flex-start !important; flex-direction: column; }
@@ -313,7 +357,7 @@ const OwnerView = () => {
                     backgroundColor: actionMessage.type === 'error' ? '#fff1f2' : '#f0fdf4',
                     color: actionMessage.type === 'error' ? '#b91c1c' : '#15803d',
                     border: `1px solid ${actionMessage.type === 'error' ? '#fecdd3' : '#bbf7d0'}`
-                }}>
+                }} role="alert">
                     {actionMessage.text}
                 </div>
             )}
@@ -321,7 +365,7 @@ const OwnerView = () => {
             {error && (
                 <div className="dashboard-error" style={{ padding: '0.8rem 1rem', backgroundColor: '#fff1f2', color: '#b91c1c', border: '1px solid #fecdd3', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.875rem' }}>
                     <span>{error}</span>
-                    <button className="dashboard-retry" onClick={fetchOwnerData}>Retry</button>
+                    <button type="button" className="dashboard-retry" onClick={fetchOwnerData}>Retry</button>
                 </div>
             )}
 
@@ -338,7 +382,7 @@ const OwnerView = () => {
             )}
 
             {/* Navigation Tabs */}
-            <div className="dashboard-tabs" style={{ display: 'flex', gap: '0.5rem', borderBottom: '2px solid #e2e8f0', marginBottom: '1.5rem' }}>
+            <div className="dashboard-tabs" role="tablist" style={{ display: 'flex', gap: '0.5rem', borderBottom: '2px solid #e2e8f0', marginBottom: '1.5rem' }}>
                 {[
                     { id: 'VEHICLES', label: `My Hosted Fleet (${myVehicles.length})` },
                     { id: 'BIDS', label: `Agency Bids (${myBids.length})` },
@@ -348,6 +392,8 @@ const OwnerView = () => {
                         key={tab.id}
                         type="button"
                         onClick={() => setActiveTab(tab.id)}
+                        aria-selected={activeTab === tab.id}
+                        role="tab"
                         className="dashboard-tab"
                         style={{
                             padding: '0.6rem 1.2rem',
@@ -376,7 +422,7 @@ const OwnerView = () => {
                     ) : (
                         <div className="owner-vehicle-grid" style={{ display: 'grid', gap: '1.5rem' }}>
                             {myVehicles.map((vehicle) => (
-                                <div key={vehicle.id} className="dashboard-surface" style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#fff' }}>
+                                <div key={vehicle.id} className="owner-vehicle-shell dashboard-surface">
                                     <VehicleCard car={vehicle} actionLabel="Owner Item" isOwner={true} />
                                     <div className="owner-vehicle-actions" style={{ padding: '0.75rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                                         <button
@@ -425,10 +471,12 @@ const OwnerView = () => {
                         <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Submit Bid to Agency</h4>
                         
                         <div style={{ marginBottom: '1rem' }}>
-                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Select Vehicle</label>
+                            <label htmlFor="owner-bid-vehicle" style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Select Vehicle</label>
                             <select
+                                id="owner-bid-vehicle"
                                 value={selectedVehicleForBid}
                                 onChange={(e) => setSelectedVehicleForBid(e.target.value)}
+                                required
                                 style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.875rem' }}
                             >
                                 <option value="">Select your car</option>
@@ -510,12 +558,17 @@ const OwnerView = () => {
                         </div>
 
                         <div style={{ marginBottom: '1rem' }}>
-                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Daily Rate Bid (₹)</label>
+                            <label htmlFor="owner-bid-amount" style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Daily Rate Bid (₹)</label>
                             <input
+                                id="owner-bid-amount"
                                 type="number"
                                 placeholder="Enter daily rate bid"
                                 value={bidAmount}
                                 onChange={(e) => setBidAmount(e.target.value)}
+                                min="0.01"
+                                step="0.01"
+                                required
+                                aria-label="Daily rate bid in rupees"
                                 style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.875rem' }}
                             />
                         </div>
@@ -618,6 +671,7 @@ const OwnerView = () => {
                     setEditingVehicle(null);
                 }}
                 onSubmit={editingVehicle ? handleUpdateVehicle : handleAddVehicle}
+                onDeleteImage={handleDeleteVehicleImage}
             />
         </div>
     );

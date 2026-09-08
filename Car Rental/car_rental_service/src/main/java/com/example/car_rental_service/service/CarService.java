@@ -18,6 +18,8 @@ public interface CarService {
 
     CarImage getCarImageByIndex(Long carId, int index);
 
+    Car removeCarImage(Long carId, int index);
+
     List<Car> getAllAvailableApprovedCars();
 
     List<Car> getCarsByAgency(Long agencyId);
@@ -27,6 +29,8 @@ public interface CarService {
     List<Car> getCarsForCurrentOwner();
 
     Car getCarById(Long id);
+
+    Car getPublicCarById(Long id);
 
     Car toggleCarAvailability(Long id, boolean isAvailable);
 

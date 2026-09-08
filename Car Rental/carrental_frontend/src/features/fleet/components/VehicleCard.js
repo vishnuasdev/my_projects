@@ -11,7 +11,7 @@ const VehicleCard = ({ car, onSelectBook, isOwner = false }) => {
     const embeddedImages = Array.isArray(car.carImage) ? car.carImage : [];
     const imageCount = Math.min(
         5,
-        Math.max(embeddedImages.length, Number(car.imageCount || car.images?.length || 0), 5)
+        Math.max(embeddedImages.length, Number(car.imageCount || car.images?.length || 0))
     );
     const imageSources = Array.from({ length: imageCount }, (_, index) => embeddedImages[index]
         ? `data:${car.carImageType?.[index] || 'image/jpeg'};base64,${embeddedImages[index]}`
@@ -86,7 +86,7 @@ const VehicleCard = ({ car, onSelectBook, isOwner = false }) => {
 
             <div className="car-details" style={{ padding: '0.75rem' }}>
                 <h3 className="car-title" style={{ margin: 0, color: '#0f172a', fontSize: '1rem' }}>{car.brand} {car.model}</h3>
-                <p className="car-meta" style={{ margin: '0.2rem 0', color: '#64748b', fontSize: '0.8rem' }}>{car.fuelType} • {car.transmission}</p>
+                <p className="car-meta" style={{ margin: '0.2rem 0', color: '#64748b', fontSize: '0.8rem' }}>{car.type || 'SEDAN'} • {car.fuelType} • {car.transmission}</p>
 
                 <div className="car-footer" style={{ display: 'flex', alignItems: 'center', justifyContent: isOwner ? 'flex-start' : 'space-between', gap: '0.5rem', marginTop: '0.45rem' }}>
                     <div className="car-price">

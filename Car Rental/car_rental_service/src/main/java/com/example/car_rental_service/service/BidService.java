@@ -8,6 +8,8 @@ import java.util.Optional;
 public interface BidService {
     List<Bid> getAllBids();
     Bid placeBid(Bid bid);
+    List<Bid> getBidsByOwnerEmail(String email);
+    boolean deleteBidByOwner(Long id, String email);
     Optional<Bid> updateBidStatus(Long id, String status);
     Optional<Bid> getBidById(Long id);
     List<Bid> getBidsByCar(Long carId);

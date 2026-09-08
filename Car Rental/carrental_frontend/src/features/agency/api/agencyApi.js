@@ -36,6 +36,6 @@ export const agencyApi = {
     getBookings: async () => (await API.get('/agency/bookings')).data,
     updateBookingStatus: async (bookingId, status) => (await API.patch(`/agency/bookings/${bookingId}/status`, null, { params: { status } })).data,
     getBookingsForCars: async () => (await API.get('/agency/agency-cars')).data,
-    updateBidStatus: async (id, status) => (await API.patch(`/agency/${id}/status`, null, { params: { status } })).data,
+    updateBidStatus: async (id, status) => (await API.patch(`/agency/bids/${id}/status`, null, { params: { status } })).data,
     getBidsByAgency: async (agencyId) => (await API.get(`/agency/agency/${agencyId}`)).data,
 };

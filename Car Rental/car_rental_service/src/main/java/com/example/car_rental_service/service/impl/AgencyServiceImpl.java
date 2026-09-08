@@ -66,6 +66,15 @@ public class AgencyServiceImpl implements AgencyService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agency profile not found for email: " + email));
     }
 
+    private Agency getApprovedAuthenticatedAgency() {
+        Agency agency = getAuthenticatedAgency();
+        if (agency.getStatus() != AgencyStatus.APPROVED) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Only approved agencies can perform this operation.");
+        }
+        return agency;
+    }
+
     // --- CRUD OPERATIONS ---
 
     @Override
@@ -85,9 +94,7 @@ public class AgencyServiceImpl implements AgencyService {
         }
 
         agency.setUser(user);
-        if (agency.getStatus() == null) {
-            agency.setStatus(AgencyStatus.PENDING);
-        }
+        agency.setStatus(AgencyStatus.PENDING);
 
         if (image != null && !image.isEmpty()) {
             agency.setImageType(image.getContentType());
@@ -135,10 +142,6 @@ public class AgencyServiceImpl implements AgencyService {
         existingAgency.setName(updatedAgency.getName());
         existingAgency.setLocation(updatedAgency.getLocation());
 
-        if (updatedAgency.getStatus() != null) {
-            existingAgency.setStatus(updatedAgency.getStatus());
-        }
-
         if (updatedAgency.getAddress() != null) {
             existingAgency.setAddress(updatedAgency.getAddress());
         }
@@ -178,9 +181,6 @@ public class AgencyServiceImpl implements AgencyService {
         }
         if (partialAgency.getLocation() != null && !partialAgency.getLocation().isBlank()) {
             agency.setLocation(partialAgency.getLocation());
-        }
-        if (partialAgency.getStatus() != null) {
-            agency.setStatus(partialAgency.getStatus());
         }
         if (partialAgency.getAddress() != null) {
             agency.setAddress(partialAgency.getAddress());
@@ -280,13 +280,13 @@ public class AgencyServiceImpl implements AgencyService {
     @Override
     @Transactional(readOnly = true)
     public List<Car> getMyAgencyCars() {
-        Agency currentAgency = getAuthenticatedAgency();
+        Agency currentAgency = getApprovedAuthenticatedAgency();
         return carRepository.findByAgencyId(currentAgency.getId());
     }
 
     @Override
     public Car updateMyAgencyCarAvailability(Long carId, boolean isAvailable) {
-        Agency currentAgency = getAuthenticatedAgency();
+        Agency currentAgency = getApprovedAuthenticatedAgency();
         Car car = carRepository.findByIdAndAgencyId(carId, currentAgency.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Car not found or does not belong to your agency."));
 
@@ -299,14 +299,14 @@ public class AgencyServiceImpl implements AgencyService {
     @Override
     @Transactional(readOnly = true)
     public List<Bid> getAcceptedBids() {
-        Agency currentAgency = getAuthenticatedAgency();
+        Agency currentAgency = getApprovedAuthenticatedAgency();
         return bidRepository.findByAgencyIdAndStatus(currentAgency.getId(), BidStatus.ACCEPTED);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<Bid> getMyBids() {
-        Agency currentAgency = getAuthenticatedAgency();
+        Agency currentAgency = getApprovedAuthenticatedAgency();
         return bidRepository.findByAgencyId(currentAgency.getId());
     }
 
@@ -315,15 +315,43 @@ public class AgencyServiceImpl implements AgencyService {
     @Override
     @Transactional(readOnly = true)
     public List<Booking> getCustomerBookingsForAgency() {
-        Agency currentAgency = getAuthenticatedAgency();
+        Agency currentAgency = getApprovedAuthenticatedAgency();
         return bookingRepository.findByCarAgencyId(currentAgency.getId());
     }
 
     @Override
     public Booking updateBookingStatus(Long bookingId, BookingStatus status) {
-        Agency currentAgency = getAuthenticatedAgency();
-        Booking booking = bookingRepository.findByIdAndCarAgencyId(bookingId, currentAgency.getId())
+        Agency currentAgency = getApprovedAuthenticatedAgency();
+        Booking booking = bookingRepository.findByIdAndCarAgencyIdForUpdate(bookingId, currentAgency.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Booking not found or not associated with your agency cars."));
+
+        if (status == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Booking status is required.");
+        }
+        if (status == BookingStatus.CONFIRMED && booking.getStatus() != BookingStatus.PENDING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only a pending customer request can be confirmed by the agency.");
+        }
+        if (status == BookingStatus.REJECTED && booking.getStatus() != BookingStatus.PENDING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only a pending customer request can be rejected.");
+        }
+        if (status == BookingStatus.COMPLETED && booking.getStatus() != BookingStatus.CONFIRMED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only a confirmed booking can be marked completed.");
+        }
+
+        if (status == BookingStatus.CONFIRMED) {
+            boolean conflict = bookingRepository.existsOverlappingBooking(
+                    booking.getCar().getId(),
+                    booking.getStartDate(),
+                    booking.getEndDate(),
+                    List.of(BookingStatus.CANCELLED, BookingStatus.REJECTED, BookingStatus.COMPLETED),
+                    booking.getId());
+            if (conflict) {
+                throw new IllegalStateException("Cannot confirm: dates collide with an already reserved booking.");
+            }
+        }
 
         booking.setStatus(status);
 

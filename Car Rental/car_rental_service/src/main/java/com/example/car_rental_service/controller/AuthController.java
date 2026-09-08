@@ -9,6 +9,7 @@ import com.example.car_rental_service.model.enums.UserStatus;
 import com.example.car_rental_service.model.mapper.UserMapper;
 import com.example.car_rental_service.security.JwtUtil;
 import com.example.car_rental_service.service.UserService;
+import com.example.car_rental_service.repository.CustomerRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,15 +34,18 @@ public class AuthController {
     private final UserMapper userMapper;
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
+    private final CustomerRepository customerRepository;
 
     public AuthController(UserService userService,
                           UserMapper userMapper,
                           AuthenticationManager authenticationManager,
-                          JwtUtil jwtUtil) {
+                          JwtUtil jwtUtil,
+                          CustomerRepository customerRepository) {
         this.userService = userService;
         this.userMapper = userMapper;
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
+        this.customerRepository = customerRepository;
     }
 
     @PostMapping("/register")
@@ -92,6 +96,7 @@ public class AuthController {
         // 6. Generate token
         String jwt = jwtUtil.generateToken(userDetails, role);
 
-        return ResponseEntity.ok(new JwtResponse(jwt, user.getEmail(), role, user.getStatus().name()));
+        Long profileId = customerRepository.findByUserId(user.getId()).map(customer -> customer.getId()).orElse(null);
+        return ResponseEntity.ok(new JwtResponse(jwt, user.getEmail(), role, user.getStatus().name(), profileId));
     }
 }
