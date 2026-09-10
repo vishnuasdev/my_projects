@@ -1,56 +1,97 @@
 import API from '../../../services/axiosInstance';
 
-const normalizeRole = (role) => String(role || '').toLowerCase().replace('role_', '');
+const normalizeRole = (role) =>
+    String(role || '')
+        .toLowerCase()
+        .replace('role_', '');
 
-const createProfileFormData = (partName, profileData, image) => {
+const ROLE_CONFIG = {
+    customer: {
+        profile: '/customers/profile',
+        image: '/customers/profile/image',
+    },
+    owner: {
+        profile: '/owner/profile',
+        image: '/owner/profile/image',
+    },
+    agency: {
+        profile: '/agency/profile',
+        image: '/agency/profile/image',
+    },
+};
+
+const getConfig = (role) => {
+    const cleanRole = normalizeRole(role);
+    const config = ROLE_CONFIG[cleanRole];
+
+    if (!config) {
+        throw new Error(`Unsupported profile role: ${cleanRole}`);
+    }
+
+    return config;
+};
+
+const createProfileFormData = (profileData, image) => {
     const formData = new FormData();
-    formData.append(partName, new Blob([JSON.stringify(profileData)], { type: 'application/json' }));
-    if (image) formData.append('image', image);
+
+    formData.append(
+        'profile',
+        new Blob(
+            [JSON.stringify(profileData)],
+            { type: 'application/json' }
+        )
+    );
+
+    if (image) {
+        formData.append('image', image);
+    }
+
     return formData;
 };
 
-const getProfileId = (user) => user?.profileId || user?.customerId || user?.id;
+export const fetchProfileByRole = async (role) => {
+    const config = getConfig(role);
 
-export const fetchProfileByRole = async (role, user) => {
-    const cleanRole = normalizeRole(role);
+    const response = await API.get(config.profile);
 
-    if (cleanRole === 'customer') {
-        const userId = getProfileId(user);
-        if (!userId) {
-            throw new Error('Customer profile ID is missing from the login response.');
-        }
-        return (await API.get(`/customers/user/${userId}`)).data;
-    }
-
-    if (cleanRole === 'owner' || cleanRole === 'agency') {
-        return (await API.get(`/${cleanRole}/profile`)).data;
-    }
-
-    throw new Error(`Profile endpoint is not available for role: ${cleanRole || 'unknown'}`);
+    return response.data;
 };
 
-export const updateProfileByRole = async (role, profileData, user, image) => {
-    const cleanRole = normalizeRole(role);
+export const updateProfileByRole = async (
+    role,
+    profileData,
+    image = null
+) => {
+    const config = getConfig(role);
 
-    if (cleanRole === 'customer') {
-        const profileId = profileData.id || user?.profileId || user?.customerId;
-        if (!profileId) {
-            throw new Error('Customer profile ID is missing from the login response.');
+    const formData = createProfileFormData(
+        profileData,
+        image
+    );
+
+    const response = await API.put(
+        config.profile,
+        formData
+    );
+
+    return response.data;
+};
+
+export const fetchProfileImageByRole = async (role) => {
+    const config = getConfig(role);
+
+    const response = await API.get(
+        config.image,
+        {
+            responseType: 'blob',
         }
-        const customerPayload = {
-            ...profileData,
-            name: profileData.name,
-            phone: profileData.phone,
-        };
-        if (!image) {
-            return (await API.patch(`/customers/${profileId}`, customerPayload)).data;
-        }
-        return (await API.put(`/customers/${profileId}`, createProfileFormData('customer', customerPayload, image))).data;
-    }
+    );
 
-    if (cleanRole === 'owner' || cleanRole === 'agency') {
-        return (await API.put(`/${cleanRole}/profile`, createProfileFormData(cleanRole, profileData, image))).data;
-    }
+    return URL.createObjectURL(response.data);
+};
 
-    throw new Error(`Profile endpoint is not available for role: ${cleanRole || 'unknown'}`);
+export const deleteProfileImageByRole = async (role) => {
+    const config = getConfig(role);
+
+    await API.delete(config.image);
 };
