@@ -18,6 +18,7 @@ import com.example.car_rental_service.repository.BookingRepository;
 import com.example.car_rental_service.repository.CarRepository;
 import com.example.car_rental_service.repository.UserRepository;
 import com.example.car_rental_service.service.AgencyService;
+import com.example.car_rental_service.util.ImageValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -63,7 +64,16 @@ public class AgencyServiceImpl implements AgencyService {
     private Agency getAuthenticatedAgency() {
         String email = getAuthenticatedUserEmail();
         return agencyRepository.findByUserEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agency profile not found for email: " + email));
+                .orElseGet(() -> {
+                    User user = userRepository.findByEmail(email)
+                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agency profile not found for email: " + email));
+                    Agency newAgency = new Agency();
+                    newAgency.setUser(user);
+                    newAgency.setName(user.getName() != null && !user.getName().isBlank() ? user.getName() : "Agency");
+                    newAgency.setLocation("Not Specified");
+                    newAgency.setStatus(AgencyStatus.PENDING);
+                    return agencyRepository.save(newAgency);
+                });
     }
 
     private Agency getApprovedAuthenticatedAgency() {
@@ -97,6 +107,7 @@ public class AgencyServiceImpl implements AgencyService {
         agency.setStatus(AgencyStatus.PENDING);
 
         if (image != null && !image.isEmpty()) {
+            ImageValidator.validate(image);
             agency.setImageType(image.getContentType());
             agency.setProfileImage(image.getBytes());
         }
@@ -139,14 +150,28 @@ public class AgencyServiceImpl implements AgencyService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only update your own agency profile.");
         }
 
-        existingAgency.setName(updatedAgency.getName());
-        existingAgency.setLocation(updatedAgency.getLocation());
+        if (updatedAgency.getName() != null && !updatedAgency.getName().isBlank()) {
+            existingAgency.setName(updatedAgency.getName().trim());
+        }
+
+        if (updatedAgency.getLocation() != null && !updatedAgency.getLocation().isBlank()) {
+            existingAgency.setLocation(updatedAgency.getLocation());
+        }
+
+        if (updatedAgency.getPhoneNumber() != null && !updatedAgency.getPhoneNumber().isBlank()) {
+            User user = existingAgency.getUser();
+            if (user != null) {
+                user.setPhoneNumber(updatedAgency.getPhoneNumber().trim());
+                userRepository.save(user);
+            }
+        }
 
         if (updatedAgency.getAddress() != null) {
             existingAgency.setAddress(updatedAgency.getAddress());
         }
 
         if (image != null && !image.isEmpty()) {
+            ImageValidator.validate(image);
             existingAgency.setImageType(image.getContentType());
             existingAgency.setProfileImage(image.getBytes());
         }
@@ -167,6 +192,14 @@ public class AgencyServiceImpl implements AgencyService {
     }
 
     @Override
+    public void removeMyProfileImage() {
+        Agency agency = getAuthenticatedAgency();
+        agency.setProfileImage(null);
+        agency.setImageType(null);
+        agencyRepository.save(agency);
+    }
+
+    @Override
     public Agency patchAgency(Long id, Agency partialAgency) {
         String email = getAuthenticatedUserEmail();
         Agency agency = agencyRepository.findById(id)
@@ -181,6 +214,13 @@ public class AgencyServiceImpl implements AgencyService {
         }
         if (partialAgency.getLocation() != null && !partialAgency.getLocation().isBlank()) {
             agency.setLocation(partialAgency.getLocation());
+        }
+        if (partialAgency.getPhoneNumber() != null && !partialAgency.getPhoneNumber().isBlank()) {
+            User user = agency.getUser();
+            if (user != null) {
+                user.setPhoneNumber(partialAgency.getPhoneNumber().trim());
+                userRepository.save(user);
+            }
         }
         if (partialAgency.getAddress() != null) {
             agency.setAddress(partialAgency.getAddress());
@@ -203,6 +243,7 @@ public class AgencyServiceImpl implements AgencyService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Image file cannot be empty.");
         }
 
+        ImageValidator.validate(image);
         agency.setImageType(image.getContentType());
         agency.setProfileImage(image.getBytes());
 
@@ -245,8 +286,8 @@ public class AgencyServiceImpl implements AgencyService {
 
         Agency agency = optionalAgency.get();
 
-        if (updateDto.getName() != null) {
-            agency.setName(updateDto.getName());
+        if (updateDto.getName() != null && !updateDto.getName().isBlank()) {
+            agency.setName(updateDto.getName().trim());
         }
         if (updateDto.getLocation() != null) {
             agency.setLocation(updateDto.getLocation());

@@ -127,7 +127,7 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, onDeleteImage, initialData })
     };
 
     return (
-        <div style={{
+        <div className="vehicle-modal__panel" style={{
             position: 'fixed',
             top: 0,
             left: 0,
@@ -194,7 +194,7 @@ const VehicleModal = ({ isOpen, onClose, onSubmit, onDeleteImage, initialData })
                 )}
 
                 {/* Form Body */}
-                <form onSubmit={handleSubmit} style={{ padding: '1.5rem', overflowY: 'auto' }}>
+                <form className="vehicle-modal__body" onSubmit={handleSubmit} style={{ padding: '1.5rem', overflowY: 'auto' }}>
                     {initialData?.id && getExistingImageCount(initialData) > 0 && (
                         <div style={{ marginBottom: '1rem' }}>
                             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.5rem' }}>

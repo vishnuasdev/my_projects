@@ -30,6 +30,8 @@ public interface AgencyService {
 
     Agency updateMyProfile(Agency updatedAgency, MultipartFile image) throws IOException;
 
+    void removeMyProfileImage();
+
     Agency patchAgency(Long id, Agency partialAgency);
 
     Agency updateAgencyImage(Long id, MultipartFile image) throws IOException;

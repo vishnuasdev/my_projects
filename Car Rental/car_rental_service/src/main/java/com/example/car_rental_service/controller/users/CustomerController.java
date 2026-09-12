@@ -1,6 +1,8 @@
 package com.example.car_rental_service.controller.users;
 
+import com.example.car_rental_service.model.dto.response.UserResponse;
 import com.example.car_rental_service.model.entity.Booking;
+import com.example.car_rental_service.model.entity.users.Agency;
 import com.example.car_rental_service.model.entity.users.Customer;
 import com.example.car_rental_service.service.BookingService;
 import com.example.car_rental_service.service.CustomerService;
@@ -13,6 +15,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.io.IOException;
 import java.util.List;
@@ -50,32 +54,95 @@ public class CustomerController {
 
     // GET: List all customers
     @GetMapping
+    @PreAuthorize("hasAuthority('ADMIN')")
     public ResponseEntity<List<Customer>> getAllCustomers() {
         return ResponseEntity.ok(customerService.getAllCustomers());
     }
 
     // GET: Retrieve customer by customer ID
     @GetMapping("/{id}")
-    public ResponseEntity<Customer> getCustomerById(@PathVariable @Positive Long id) {
-        return customerService.getCustomerById(id)
+    public ResponseEntity<Customer> getCustomerById(
+            @PathVariable @Positive Long id,
+            Authentication authentication) {
+        boolean isAdmin = isAdmin(authentication);
+        return (isAdmin ? customerService.getCustomerById(id)
+                : customerService.getCustomerByIdForCurrentUser(id))
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/profile")
+    public ResponseEntity<UserResponse> getMyProfile() {
+        Customer customer = customerService.getMyProfile();
+        return ResponseEntity.ok(toProfileResponse(customer));
+    }
+
+    @PutMapping(value = "/profile", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<UserResponse> updateMyProfile(
+            @RequestPart("customer") @Valid Customer customer,
+            @RequestPart(value = "image", required = false) MultipartFile image) throws IOException {
+        return ResponseEntity.ok(toProfileResponse(customerService.updateMyProfile(customer, image)));
+    }
+
+    private UserResponse toProfileResponse(Customer customer) {
+        UserResponse response = new UserResponse();
+        response.setId(customer.getId());
+        response.setDob(customer.getDob());
+        response.setLicenseNo(customer.getLicenseNo());
+        response.setLocation(customer.getLocation());
+        response.setAddress(customer.getAddress());
+        response.setHasProfileImage(customer.getProfileImage() != null && customer.getProfileImage().length > 0);
+        if (customer.getUser() != null) {
+            response.setEmail(customer.getUser().getEmail());
+            response.setName(customer.getUser().getName());
+            response.setPhone(customer.getUser().getPhoneNumber());
+        }
+        return response;
+    }
+
+    @GetMapping("/profile/image")
+    public ResponseEntity<byte[]> getMyProfileImage() {
+        Customer customer = customerService.getMyProfile();
+        if (customer.getProfileImage() == null || customer.getProfileImage().length == 0) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(
+                        customer.getImageType() != null ? customer.getImageType() : MediaType.IMAGE_JPEG_VALUE))
+                .body(customer.getProfileImage());
+    }
+
+    @DeleteMapping("/profile/image")
+    public ResponseEntity<Void> removeMyProfileImage() {
+        customerService.removeMyProfileImage();
+        return ResponseEntity.noContent().build();
+    }
+
+
     // GET: Retrieve customer by associated user ID
     @GetMapping("/user/{userId}")
-    public ResponseEntity<Customer> getCustomerByUserId(@PathVariable @Positive Long userId) {
-        Customer customer = customerService.getCustomerByUserId(userId);
+    public ResponseEntity<Customer> getCustomerByUserId(
+            @PathVariable @Positive Long userId,
+            Authentication authentication) {
+        Customer customer = isAdmin(authentication)
+                ? customerService.getCustomerByUserId(userId)
+                : customerService.getMyProfile();
         return ResponseEntity.ok(customer);
     }
 
     // GET: Stream profile image binary content
     @GetMapping("/{id}/image")
-    public ResponseEntity<byte[]> getCustomerImage(@PathVariable @Positive Long id) {
-        Customer customer = customerService.getCustomerById(id)
+    public ResponseEntity<byte[]> getCustomerImage(
+            @PathVariable @Positive Long id,
+            Authentication authentication) {
+        Customer customer = (isAdmin(authentication) ? customerService.getCustomerById(id)
+                : customerService.getCustomerByIdForCurrentUser(id))
                 .orElseThrow(() -> new RuntimeException("Customer not found with ID: " + id));
 
-        byte[] imageData = customerService.getCustomerImage(id);
+        byte[] imageData = isAdmin(authentication)
+                ? customerService.getCustomerImage(id)
+                : customerService.getCustomerImageForCurrentUser(id);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(customer.getImageType() != null ? customer.getImageType() : "image/jpeg"))
@@ -128,10 +195,17 @@ public class CustomerController {
         return ResponseEntity.notFound().build();
     }
 
+    private boolean isAdmin(Authentication authentication) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ADMIN".equals(authority.getAuthority())
+                        || "ROLE_ADMIN".equals(authority.getAuthority()));
+    }
+
     // --- ADMIN OPERATIONS ---
 
     // PUT: Direct administrative update for customer records
     @PutMapping("/admin/{id}")
+    @PreAuthorize("hasAuthority('ADMIN')")
     public ResponseEntity<Customer> updateCustomerByAdmin(
             @PathVariable @Positive Long id,
             @RequestBody Customer customer) {
@@ -142,6 +216,7 @@ public class CustomerController {
 
     // DELETE: Direct administrative deletion for customer records
     @DeleteMapping("/admin/{id}")
+    @PreAuthorize("hasAuthority('ADMIN')")
     public ResponseEntity<Void> deleteCustomerByAdmin(@PathVariable @Positive Long id) {
         boolean deleted = customerService.deleteCustomerByAdmin(id);
         if (deleted) {
@@ -163,8 +238,4 @@ public class CustomerController {
     public ResponseEntity<List<Booking>> getMyBookings() {
         return ResponseEntity.ok(bookingService.getMyBookings());
     }
-
-
-//    @GetMapping("/agencies")
-//    pub0
 }

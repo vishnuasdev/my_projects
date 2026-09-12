@@ -39,7 +39,7 @@ const VehicleCard = ({ car, onSelectBook, isOwner = false }) => {
     };
 
     return (
-        <div className="car-card" style={{ overflow: 'hidden', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+        <div className="car-card vehicle-card">
             <div className="vehicle-image-container" style={{ height: '210px', overflow: 'hidden', background: '#f8fafc', position: 'relative' }}>
                 {car.id && activeImageIndex >= 0 ? (
                     <img
@@ -84,11 +84,11 @@ const VehicleCard = ({ car, onSelectBook, isOwner = false }) => {
                 </div>
             )}
 
-            <div className="car-details" style={{ padding: '0.75rem' }}>
+            <div className="car-details vehicle-card__details">
                 <h3 className="car-title" style={{ margin: 0, color: '#0f172a', fontSize: '1rem' }}>{car.brand} {car.model}</h3>
                 <p className="car-meta" style={{ margin: '0.2rem 0', color: '#64748b', fontSize: '0.8rem' }}>{car.type || 'SEDAN'} • {car.fuelType} • {car.transmission}</p>
 
-                <div className="car-footer" style={{ display: 'flex', alignItems: 'center', justifyContent: isOwner ? 'flex-start' : 'space-between', gap: '0.5rem', marginTop: '0.45rem' }}>
+                <div className="car-footer vehicle-card__footer" style={{ display: 'flex', alignItems: 'center', justifyContent: isOwner ? 'flex-start' : 'space-between', gap: '0.5rem', marginTop: '0.45rem' }}>
                     <div className="car-price">
                         <span className="price-amount" style={{ fontWeight: 700, color: '#0f172a' }}>₹{Number(car.dailyRate || 0).toLocaleString('en-IN')}</span>
                         <span className="price-period" style={{ color: '#64748b', fontSize: '0.75rem' }}> / day</span>

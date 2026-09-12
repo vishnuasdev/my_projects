@@ -65,4 +65,16 @@ public class Booking {
         }
         return 0.0;
     }
+
+    @Transient
+    @JsonProperty("carId")
+    public Long getCarId() {
+        return car != null ? car.getId() : null;
+    }
+
+    @Transient
+    @JsonProperty("customerEmail")
+    public String getCustomerEmail() {
+        return customer != null && customer.getUser() != null ? customer.getUser().getEmail() : null;
+    }
 }

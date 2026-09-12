@@ -1,6 +1,7 @@
 package com.example.car_rental_service.security;
 
 import com.example.car_rental_service.model.entity.User;
+import com.example.car_rental_service.model.enums.UserStatus;
 import com.example.car_rental_service.repository.UserRepository;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -22,12 +23,16 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
+                .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
 
         // Direct Enum authority string (ADMIN, AGENCY, CUSTOMER, OWNER)
         return new org.springframework.security.core.userdetails.User(
                 user.getEmail(),
                 user.getPassword(),
+                user.getStatus() == UserStatus.ACTIVE,
+                true,
+                true,
+                true,
                 Collections.singletonList(new SimpleGrantedAuthority(user.getRole().name()))
         );
     }

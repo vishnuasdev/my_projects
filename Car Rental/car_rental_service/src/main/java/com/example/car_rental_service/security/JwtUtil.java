@@ -22,11 +22,27 @@ public class JwtUtil {
     private final long expirationMs;
 
     public JwtUtil(
-            @Value("${app.jwt.secret}") String secret,
+            @Value("${app.jwt.secret:}") String secret,
             @Value("${app.jwt.expiration-ms}") long expirationMs) {
-        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        byte[] keyBytes = resolveKey(secret);
         this.signingKey = Keys.hmacShaKeyFor(keyBytes);
+        if (expirationMs <= 0) {
+            throw new IllegalStateException("JWT_EXPIRATION_MS must be greater than zero.");
+        }
         this.expirationMs = expirationMs;
+    }
+
+    private byte[] resolveKey(String configuredSecret) {
+        if (configuredSecret != null && !configuredSecret.isBlank()) {
+            byte[] configuredBytes = configuredSecret.getBytes(StandardCharsets.UTF_8);
+            if (configuredBytes.length < 32) {
+                throw new IllegalStateException("JWT_SECRET must contain at least 32 UTF-8 bytes.");
+            }
+            return configuredBytes;
+        }
+
+        throw new IllegalStateException(
+                "JWT secret is not configured. Set JWT_SECRET to a random value of at least 32 UTF-8 bytes.");
     }
 
     private SecretKey getSigningKey() {

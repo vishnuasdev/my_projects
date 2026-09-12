@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { normalizeRole } from '../../../providers/AuthProvider';
 import { useAuth } from '../hooks/useAuth';
 
 const LoginForm = ({ allowAuthenticated = false }) => {
@@ -22,7 +23,7 @@ const LoginForm = ({ allowAuthenticated = false }) => {
 
         try {
             const loginResult = await login(formData);
-            const user = loginResult.user || loginResult;
+            const user = normalizeRole(loginResult.user || loginResult);
 
             // Double check status before navigating
             const currentStatus = user.status ? user.status.toUpperCase() : '';
@@ -35,7 +36,7 @@ const LoginForm = ({ allowAuthenticated = false }) => {
             }
 
             // Route user based on role for ACTIVE accounts
-            const role = user.role ? user.role.toUpperCase() : '';
+            const role = String(user.role || '').toUpperCase().replace(/^ROLE_/, '');
 
             if (role.includes('CUSTOMER')) navigate('/customer/dashboard');
             else if (role.includes('AGENCY')) navigate('/agency/dashboard');
@@ -61,28 +62,30 @@ const LoginForm = ({ allowAuthenticated = false }) => {
     };
 
     return (
-        <div className="auth-card">
-            <h2>{allowAuthenticated || location.pathname === '/login/add' ? 'Add account' : 'Sign In'}</h2>
+        <div className="auth-page">
+          <section className="auth-card">
+            <header className="auth-card__header">
+                <p className="auth-card__eyebrow">Car Rental</p>
+                <h1>{allowAuthenticated || location.pathname === '/login/add' ? 'Add account' : 'Welcome back'}</h1>
+                <p className="auth-card__subtitle">
+                    {allowAuthenticated || location.pathname === '/login/add'
+                        ? 'Add another account to this browser.'
+                        : 'Sign in to manage your rentals and account.'}
+                </p>
+            </header>
 
             {statusError.message && (
-                <div style={{
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    border: '1px solid var(--danger, #ef4444)',
-                    borderRadius: '0.375rem',
-                    padding: '0.75rem 1rem',
-                    marginBottom: '1rem',
-                    fontSize: '0.875rem'
-                }}>
+                <div className="auth-card__alert" role="alert" aria-live="assertive">
                     {statusError.status && (
-                        <p style={{ margin: '0 0 0.25rem 0', fontWeight: 'bold', color: 'var(--danger, #ef4444)' }}>
+                        <p>
                             Status: {statusError.status}
                         </p>
                     )}
-                    <p style={{ margin: 0, color: 'var(--danger, #ef4444)' }}>{statusError.message}</p>
+                    <p>{statusError.message}</p>
                 </div>
             )}
 
-            <form onSubmit={handleSubmit}>
+            <form className="auth-card__form" onSubmit={handleSubmit}>
                 <div className="form-group">
                     <label className="form-label">Email Address *</label>
                     <input
@@ -91,7 +94,8 @@ const LoginForm = ({ allowAuthenticated = false }) => {
                         className="form-input"
                         value={formData.email}
                         onChange={handleChange}
-                        placeholder="Email"
+                        placeholder="you@example.com"
+                        autoComplete="email"
                         required
                     />
                 </div>
@@ -104,24 +108,25 @@ const LoginForm = ({ allowAuthenticated = false }) => {
                         className="form-input"
                         value={formData.password}
                         onChange={handleChange}
-                        placeholder="••••••••"
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
                         required
                     />
                 </div>
 
                 <button 
                     type="submit" 
-                    className="btn btn-primary btn-md" 
                     disabled={isLoading} 
-                    style={{ width: '100%', marginTop: '0.5rem' }}
+                    className="btn btn-primary btn-md auth-card__button"
                 >
                     {isLoading ? 'Signing in...' : 'Log In'}
                 </button>
             </form>
 
-            <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                Don't have an account? <Link to="/register" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: '600' }}>Register</Link>
+            <p className="auth-card__footer">
+                Don't have an account? <Link to="/register">Register</Link>
             </p>
+          </section>
         </div>
     );
 };

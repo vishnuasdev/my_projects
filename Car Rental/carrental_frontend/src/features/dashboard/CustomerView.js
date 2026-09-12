@@ -70,7 +70,7 @@ const CustomerView = () => {
     const customerName = user?.name || user?.fullName || user?.email?.split('@')[0] || 'there';
 
     return (
-        <div style={{ minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+        <div className="dashboard-shell" style={{ minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
             
             {/* Header Banner */}
             <header style={{ maxWidth: '1280px', margin: '0 auto', padding: '1.5rem 1rem 0' }}>
@@ -99,7 +99,7 @@ const CustomerView = () => {
                                 {bookingCounts.PENDING || 0} Awaiting Approval
                             </span>
                             <span style={{ padding: '0.25rem 0.65rem', borderRadius: '9999px', background: '#dcfce7', border: '1px solid #86efac', color: '#15803d', fontSize: '0.75rem', fontWeight: 600 }}>
-                                {bookingCounts.APPROVED || bookingCounts.CONFIRMED || 0} Approved
+                                {bookingCounts.CONFIRMED || 0} Approved
                             </span>
                         </div>
                     </div>
@@ -165,7 +165,7 @@ const CustomerView = () => {
 
                         {/* Status Filters */}
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', margin: '1.25rem 0' }}>
-                            {['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'COMPLETED'].map(status => (
+                            {['ALL', 'PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'COMPLETED'].map(status => (
                                 <button 
                                     key={status} 
                                     type="button" 

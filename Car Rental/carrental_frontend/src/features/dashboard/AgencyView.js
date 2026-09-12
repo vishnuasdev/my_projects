@@ -105,7 +105,12 @@ const AgencyView = () => {
         }
 
         if (results.some(result => result.status === 'rejected')) {
-            setError('Some agency details could not be loaded. Please try again.');
+            const isForbidden = results.some(result => result.status === 'rejected' && result.reason?.response?.status === 403);
+            if (isForbidden) {
+                setError('Your agency account is currently pending admin approval. You will gain access once verified.');
+            } else {
+                setError('Some agency details could not be loaded. Please try again.');
+            }
         }
 
         // Generate dynamic notifications from incoming PENDING Bids and BOOKINGS
@@ -182,7 +187,7 @@ const AgencyView = () => {
         const activeBookings = bookings.filter(b => ['CONFIRMED', 'PENDING'].includes(String(b.status).toUpperCase())).length;
         const totalRevenue = bookings
             .filter(b => String(b.status).toUpperCase() === 'COMPLETED' || String(b.status).toUpperCase() === 'CONFIRMED')
-            .reduce((acc, curr) => acc + (Number(curr.totalCost) || 0), 0);
+            .reduce((acc, curr) => acc + (Number(curr.totalAmount) || 0), 0);
 
         return { pendingBids, activeFleet, activeBookings, totalRevenue };
     }, [bids, cars, bookings]);
@@ -215,7 +220,7 @@ const AgencyView = () => {
     if (loading) return <Spinner size="lg" />;
 
     return (
-        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '1rem', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+        <div className="agency-dashboard" style={{ maxWidth: '1280px', margin: '0 auto', padding: '1rem', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
             
             {/* Header & Notifications Bar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>

@@ -4,6 +4,7 @@ import com.example.car_rental_service.model.entity.Address;
 import com.example.car_rental_service.model.entity.User;
 import com.example.car_rental_service.model.enums.AgencyStatus;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -25,6 +26,7 @@ public class Agency {
 
     @NotBlank @Size(max = 150)
     private String name;
+
     @NotBlank @Size(max = 150)
     private String location;
 
@@ -46,6 +48,25 @@ public class Agency {
     @OneToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "address_id", referencedColumnName = "id")
     @Valid
-    @JsonIgnore
     private Address address;
+
+    @Transient
+    private String phoneNumber;
+
+    @JsonProperty("email")
+    public String getEmail() {
+        return user != null ? user.getEmail() : null;
+    }
+
+    @JsonProperty("phone")
+    public String getPhoneNumber() {
+        if (user != null && user.getPhoneNumber() != null && !user.getPhoneNumber().isBlank()) {
+            return user.getPhoneNumber();
+        }
+        return this.phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
 }

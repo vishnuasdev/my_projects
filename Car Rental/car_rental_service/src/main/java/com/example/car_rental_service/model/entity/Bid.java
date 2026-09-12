@@ -3,6 +3,7 @@ package com.example.car_rental_service.model.entity;
 import com.example.car_rental_service.model.entity.users.Agency;
 import com.example.car_rental_service.model.entity.users.Owner;
 import com.example.car_rental_service.model.enums.BidStatus;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
@@ -41,4 +42,22 @@ public class Bid {
     @JoinColumn(name = "car_id", nullable = false)
     @NotNull
     private Car car; // The car being bid / listed under the agency
+
+    @Transient
+    @JsonProperty("carId")
+    public Long getCarId() {
+        return car != null ? car.getId() : null;
+    }
+
+    @Transient
+    @JsonProperty("bidderEmail")
+    public String getBidderEmail() {
+        return owner != null && owner.getUser() != null ? owner.getUser().getEmail() : null;
+    }
+
+    @Transient
+    @JsonProperty("amount")
+    public Double getAmount() {
+        return ratePerDay;
+    }
 }

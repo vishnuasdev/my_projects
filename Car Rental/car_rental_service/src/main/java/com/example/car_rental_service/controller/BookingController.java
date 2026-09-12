@@ -42,32 +42,65 @@ public class BookingController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Booking> getBookingById(@PathVariable @Positive Long id) {
-        return bookingService.getBookingById(id)
+    public ResponseEntity<Booking> getBookingById(
+            @PathVariable @Positive Long id,
+            Authentication authentication) {
+        boolean isAdmin = hasAuthority(authentication, "ADMIN");
+        var booking = isAdmin
+                ? bookingService.getBookingById(id)
+                : hasAuthority(authentication, "CUSTOMER")
+                    ? bookingService.getBookingByIdForCustomer(id, authentication.getName())
+                    : hasAuthority(authentication, "AGENCY")
+                        ? bookingService.getBookingByIdForAgency(id, authentication.getName())
+                        : java.util.Optional.<Booking>empty();
+        return booking
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/customer/{customerId}")
-    public ResponseEntity<List<Booking>> getBookingsByCustomer(@PathVariable @Positive Long customerId) {
-        return ResponseEntity.ok(bookingService.getBookingsByCustomer(customerId));
+    public ResponseEntity<List<Booking>> getBookingsByCustomer(
+            @PathVariable @Positive Long customerId,
+            Authentication authentication) {
+        return ResponseEntity.ok(hasAuthority(authentication, "ADMIN")
+                ? bookingService.getBookingsByCustomer(customerId)
+                : bookingService.getBookingsByCustomerForUser(customerId, authentication.getName()));
     }
 
     @GetMapping("/car/{carId}")
-    public ResponseEntity<List<Booking>> getBookingsByCar(@PathVariable @Positive Long carId) {
-        return ResponseEntity.ok(bookingService.getBookingsByCar(carId));
+    public ResponseEntity<List<Booking>> getBookingsByCar(
+            @PathVariable @Positive Long carId,
+            Authentication authentication) {
+        return ResponseEntity.ok(hasAuthority(authentication, "ADMIN")
+                ? bookingService.getBookingsByCar(carId)
+                : bookingService.getBookingsByCarForOwner(carId, authentication.getName()));
     }
 
     @GetMapping("/agency/{agencyId}")
-    public ResponseEntity<List<Booking>> getBookingsByAgency(@PathVariable @Positive Long agencyId) {
-        return ResponseEntity.ok(bookingService.getBookingsByAgency(agencyId));
+    public ResponseEntity<List<Booking>> getBookingsByAgency(
+            @PathVariable @Positive Long agencyId,
+            Authentication authentication) {
+        return ResponseEntity.ok(hasAuthority(authentication, "ADMIN")
+                ? bookingService.getBookingsByAgency(agencyId)
+                : bookingService.getBookingsByAgencyForUser(agencyId, authentication.getName()));
+    }
+
+    private boolean hasAuthority(Authentication authentication, String authority) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(granted -> authority.equals(granted.getAuthority())
+                        || ("ROLE_" + authority).equals(granted.getAuthority()));
     }
 
     @PatchMapping("/{id}/cancel")
     public ResponseEntity<Void> cancelBooking(
             @PathVariable @Positive Long id,
             Authentication authentication) {
-        if (bookingService.cancelBooking(id, authentication.getName())) {
+        boolean isAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ADMIN") || a.getAuthority().equals("ROLE_ADMIN"));
+        boolean cancelled = isAdmin
+                ? bookingService.cancelBooking(id)
+                : (authentication != null && bookingService.cancelBooking(id, authentication.getName()));
+        if (cancelled) {
             return ResponseEntity.noContent().build();
         }
         return ResponseEntity.notFound().build();

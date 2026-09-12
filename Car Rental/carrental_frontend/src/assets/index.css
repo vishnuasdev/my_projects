@@ -33,6 +33,57 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+.app-main {
+    min-height: 100vh;
+    padding: 0 1rem;
+}
+
+.app-main__content {
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 5.5rem 0 2rem;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.35);
+    outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+    .app-navbar {
+        gap: 0.75rem;
+        padding: 0.75rem 1rem !important;
+    }
+
+    .app-navbar__actions {
+        gap: 0.75rem !important;
+    }
+
+    .app-navbar__actions > a {
+        font-size: 0.875rem;
+    }
+
+    .app-main {
+        padding: 0 0.75rem;
+    }
+
+    .app-main__content {
+        padding-top: 7rem;
+    }
+}
+
 /* --- Layout Container --- */
 .app-container {
     min-height: 100vh;
@@ -288,96 +339,6 @@ body {
     border-radius: var(--radius);
     font-size: 0.875rem;
     margin-bottom: 1rem;
-}
-
-/* --- Two-Column Customer Dashboard Layout --- */
-.dashboard-layout {
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 2rem;
-    align-items: start;
-}
-
-/* Left Control Panel */
-.filter-panel {
-    background-color: var(--bg-surface);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    box-shadow: var(--shadow-sm);
-    position: sticky;
-    top: 90px;
-}
-
-.panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.25rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.panel-header h3 {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--text-main);
-}
-
-.reset-btn {
-    background: none;
-    border: none;
-    color: var(--primary);
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.reset-btn:hover {
-    text-decoration: underline;
-}
-
-/* Right Side Content */
-.car-list-container {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-.list-header h2 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--text-main);
-}
-
-.car-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1.5rem;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 3rem 1rem;
-    background-color: var(--bg-surface);
-    border-radius: var(--radius);
-    border: 1px dashed var(--border-color);
-}
-
-.empty-state p {
-    color: var(--text-muted);
-    margin-bottom: 1rem;
-}
-
-/* --- Responsive Adjustments --- */
-@media (max-width: 868px) {
-    .dashboard-layout {
-        grid-template-columns: 1fr;
-    }
-
-    .filter-panel {
-        position: static;
-    }
 }
 
 /* --- Two-Column Customer Dashboard Layout --- */

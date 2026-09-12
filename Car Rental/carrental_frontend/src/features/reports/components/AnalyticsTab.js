@@ -108,7 +108,7 @@ const AnalyticsTab = () => {
                         <div className="analytics-card">
                             <h4>Total Revenue</h4>
                             <div className="analytics-value">
-                                ${(analyticsData.totalRevenue || 0).toLocaleString()}
+                                Rs {(analyticsData.totalRevenue || 0).toLocaleString()}
                             </div>
                         </div>
                         <div className="analytics-card">
@@ -134,7 +134,7 @@ const AnalyticsTab = () => {
                                     <ul className="chart-data-list">
                                         {analyticsData.revenueTrend.slice(0, 5).map((item, idx) => (
                                             <li key={idx}>
-                                                {item.month || item.date}: ${(item.revenue || 0).toLocaleString()}
+                                                {item.month || item.date}: Rs {(item.revenue || 0).toLocaleString()}
                                             </li>
                                         ))}
                                     </ul>

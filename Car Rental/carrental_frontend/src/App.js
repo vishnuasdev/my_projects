@@ -4,6 +4,8 @@ import { AuthProvider } from './providers/AuthProvider';
 import Navbar from './layouts/Navbar';
 import Router from './routes/Router'; 
 import './assets/index.css';
+import './assets/dashboard.css';
+import './assets/auth.css';
 
 function App() {
     return (
@@ -11,8 +13,8 @@ function App() {
             <AuthProvider>
                     <>
                         <Navbar />
-                        <main style={{ padding: '2rem 1rem' }}>
-                            <div style={{ paddingTop: '3.5rem' }}>
+                        <main className="app-main">
+                            <div className="app-main__content">
                                 <Router />
                             </div>
                         </main>

@@ -8,6 +8,7 @@ import {
     fetchProfileImageByRole,
     deleteProfileImageByRole
 } from '../api/profileApi';
+import { changePassword } from '../api/authApi';
 
 import Spinner from '../../../components/feedback/Spinner';
 
@@ -52,6 +53,14 @@ const ProfileView = () => {
 
     // New selected image preview
     const [imagePreview, setImagePreview] = useState('');
+    const [passwordForm, setPasswordForm] = useState({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+    });
+    const [passwordError, setPasswordError] = useState('');
+    const [passwordMessage, setPasswordMessage] = useState('');
+    const [changingPassword, setChangingPassword] = useState(false);
 
     const rawRole = user?.role || user?.roles || '';
 
@@ -669,6 +678,45 @@ const ProfileView = () => {
         }
     };
 
+    const handlePasswordSubmit = async (e) => {
+        e.preventDefault();
+        setPasswordError('');
+        setPasswordMessage('');
+
+        if (passwordForm.newPassword.length < 8 ||
+            passwordForm.newPassword.length > 72 ||
+            !/(?=.*[A-Za-z])(?=.*\d)/.test(passwordForm.newPassword)) {
+            setPasswordError('New password must be 8-72 characters and contain letters and numbers.');
+            return;
+        }
+        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            setPasswordError('New password and confirmation do not match.');
+            return;
+        }
+
+        setChangingPassword(true);
+        try {
+            await changePassword(
+                passwordForm.currentPassword,
+                passwordForm.newPassword
+            );
+            setPasswordForm({
+                currentPassword: '',
+                newPassword: '',
+                confirmPassword: ''
+            });
+            setPasswordMessage('Password updated successfully. Existing sessions remain active.');
+        } catch (err) {
+            setPasswordError(
+                err.response?.data?.message ||
+                err.response?.data?.error ||
+                'Unable to update password.'
+            );
+        } finally {
+            setChangingPassword(false);
+        }
+    };
+
     /*
      * ---------------------------------------------------------
      * FIELD LOCK
@@ -779,14 +827,14 @@ const ProfileView = () => {
 
                 .profile-card {
                     width: 100%;
-                    max-width: 760px;
+                    max-width: 980px;
                     background: #ffffff;
                     border: 1px solid #e2e8f0;
                     border-radius: 12px;
                     box-shadow:
                         0 10px 25px -5px rgba(0, 0, 0, 0.05),
                         0 8px 10px -6px rgba(0, 0, 0, 0.01);
-                    padding: 2.25rem 2.5rem;
+                    padding: clamp(1.25rem, 3vw, 2.5rem);
                     box-sizing: border-box;
                 }
 
@@ -867,6 +915,70 @@ const ProfileView = () => {
                     display: flex;
                     flex-direction: column;
                     gap: 1.5rem;
+                }
+
+                .password-card {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.85rem;
+                    margin-top: 2rem;
+                    padding-top: 1.5rem;
+                    border-top: 1px solid #e2e8f0;
+                }
+
+                .password-card h2 {
+                    margin: 0;
+                    color: #0f172a;
+                    font-size: 1.1rem;
+                }
+
+                .password-card p {
+                    margin: 0 0 0.25rem;
+                    color: #64748b;
+                    font-size: 0.875rem;
+                }
+
+                .password-fields {
+                    display: grid;
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                    gap: 1rem;
+                }
+
+                .password-card input {
+                    width: 100%;
+                    min-height: 42px;
+                    padding: 0 0.85rem;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 8px;
+                    background: #ffffff;
+                    color: #0f172a;
+                }
+
+                .password-card input:focus {
+                    border-color: #2563eb;
+                    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+                    outline: none;
+                }
+
+                .password-submit {
+                    align-self: flex-start;
+                    min-height: 42px;
+                    padding: 0.65rem 1.25rem;
+                    border: 0;
+                    border-radius: 8px;
+                    background: #0f766e;
+                    color: #ffffff;
+                    font-weight: 700;
+                    cursor: pointer;
+                }
+
+                .password-submit:hover {
+                    background: #115e59;
+                }
+
+                .password-submit:disabled {
+                    background: #99f6e4;
+                    cursor: not-allowed;
                 }
 
                 .grid-2 {
@@ -1055,6 +1167,19 @@ const ProfileView = () => {
                     }
 
                     .btn-row button {
+                        width: 100%;
+                    }
+
+                    .btn-row {
+                        flex-direction: column-reverse;
+                        align-items: stretch;
+                    }
+
+                    .password-fields {
+                        grid-template-columns: 1fr;
+                    }
+
+                    .password-submit {
                         width: 100%;
                     }
                 }
@@ -1698,6 +1823,45 @@ const ProfileView = () => {
 
                     </div>
 
+                </form>
+
+                <form
+                    onSubmit={handlePasswordSubmit}
+                    className="password-card"
+                >
+                    <h2>Change password</h2>
+                    <p>Use your current password to securely set a new one.</p>
+                    {passwordError && <div role="alert" style={{ color: '#b91c1c' }}>{passwordError}</div>}
+                    {passwordMessage && <div role="status" style={{ color: '#166534' }}>{passwordMessage}</div>}
+                    <div className="password-fields">
+                        <input
+                            type="password"
+                            required
+                            value={passwordForm.currentPassword}
+                            onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                            placeholder="Current password"
+                            autoComplete="current-password"
+                        />
+                        <input
+                            type="password"
+                            required
+                            value={passwordForm.newPassword}
+                            onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                            placeholder="New password"
+                            autoComplete="new-password"
+                        />
+                        <input
+                            type="password"
+                            required
+                            value={passwordForm.confirmPassword}
+                            onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                            placeholder="Confirm new password"
+                            autoComplete="new-password"
+                        />
+                    </div>
+                    <button className="password-submit" type="submit" disabled={changingPassword}>
+                        {changingPassword ? 'Updating...' : 'Update password'}
+                    </button>
                 </form>
 
             </div>

@@ -32,13 +32,13 @@ export const ownerApi = {
         formData.append('car', new Blob([JSON.stringify(car)], { type: 'application/json' }));
         if (agencyId) formData.append('agencyId', agencyId);
         images.forEach((image) => formData.append('images', image));
-        return (await API.post('/owner/cars', formData, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
+        return (await API.post('/owner/cars', formData)).data;
     },
     updateCar: async (id, car, images = []) => {
         const formData = new FormData();
         formData.append('car', new Blob([JSON.stringify(car)], { type: 'application/json' }));
         images.forEach((image) => formData.append('images', image));
-        return (await API.put(`/owner/cars/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
+        return (await API.put(`/owner/cars/${id}`, formData)).data;
     },
     removeCar: async (id) => (await API.delete(`/owner/cars/${id}`)).data,
     setCarAvailability: async (id, isAvailable) => (await API.patch(`/owner/cars/${id}/availability`, null, { params: { isAvailable } })).data,

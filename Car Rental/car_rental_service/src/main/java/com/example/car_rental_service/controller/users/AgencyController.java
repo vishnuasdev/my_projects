@@ -1,5 +1,6 @@
 package com.example.car_rental_service.controller.users;
 
+import com.example.car_rental_service.model.dto.response.UserResponse;
 import com.example.car_rental_service.model.entity.Bid;
 import com.example.car_rental_service.model.entity.Booking;
 import com.example.car_rental_service.model.entity.Car;
@@ -8,6 +9,7 @@ import com.example.car_rental_service.model.enums.BookingStatus;
 import com.example.car_rental_service.service.AgencyService;
 import com.example.car_rental_service.service.BidService;
 import com.example.car_rental_service.service.BookingService;
+import com.example.car_rental_service.service.CarService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import org.springframework.http.HttpHeaders;
@@ -28,11 +30,13 @@ public class AgencyController {
     private final AgencyService agencyService;
     private final BookingService bookingService;
     private final BidService bidService;
+    private final CarService carService;
 
-    public AgencyController(AgencyService agencyService, BookingService bookingService, BidService bidService) {
+    public AgencyController(AgencyService agencyService, BookingService bookingService, BidService bidService, CarService carService) {
         this.agencyService = agencyService;
         this.bookingService = bookingService;
         this.bidService = bidService;
+        this.carService = carService;
     }
 
     //Agency API
@@ -52,8 +56,29 @@ public class AgencyController {
     }
 
     @GetMapping("/profile")
-    public ResponseEntity<Agency> getMyProfile() {
-        return ResponseEntity.ok(agencyService.getMyProfile());
+    public ResponseEntity<UserResponse> getMyProfile() {
+        return ResponseEntity.ok(toProfileResponse(agencyService.getMyProfile()));
+    }
+
+    @PutMapping(value = "/profile", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<UserResponse> updateMyProfile(
+            @RequestPart("agency") @Valid Agency agency,
+            @RequestPart(value = "image", required = false) MultipartFile image) throws IOException {
+        return ResponseEntity.ok(toProfileResponse(agencyService.updateMyProfile(agency, image)));
+    }
+
+    private UserResponse toProfileResponse(Agency agency) {
+        UserResponse response = new UserResponse();
+        response.setId(agency.getId());
+        response.setName(agency.getName());
+        response.setLocation(agency.getLocation());
+        response.setAddress(agency.getAddress());
+        response.setHasProfileImage(agency.getProfileImage() != null && agency.getProfileImage().length > 0);
+        if (agency.getUser() != null) {
+            response.setEmail(agency.getUser().getEmail());
+            response.setPhone(agency.getUser().getPhoneNumber());
+        }
+        return response;
     }
 
     @GetMapping("/{id}/image")
@@ -78,11 +103,23 @@ public class AgencyController {
         return ResponseEntity.ok(updated);
     }
 
-    @PutMapping(value = "/profile", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Agency> updateMyProfile(
-            @RequestPart("agency") @Valid Agency agency,
-            @RequestPart(value = "image", required = false) MultipartFile image) throws IOException {
-        return ResponseEntity.ok(agencyService.updateMyProfile(agency, image));
+    @GetMapping("/profile/image")
+    public ResponseEntity<byte[]> getMyProfileImage() {
+        Agency agency = agencyService.getMyProfile();
+        if (agency.getProfileImage() == null || agency.getProfileImage().length == 0) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(
+                        agency.getImageType() != null ? agency.getImageType() : MediaType.IMAGE_JPEG_VALUE))
+                .body(agency.getProfileImage());
+    }
+
+    @DeleteMapping("/profile/image")
+    public ResponseEntity<Void> removeMyProfileImage() {
+        agencyService.removeMyProfileImage();
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}")
@@ -120,6 +157,15 @@ public class AgencyController {
     @PatchMapping("/cars/{carId}/availability")
     public ResponseEntity<Car> toggleCarAvailability(@PathVariable Long carId, @RequestParam boolean available) {
         return ResponseEntity.ok(agencyService.updateMyAgencyCarAvailability(carId, available));
+    }
+
+    // 2b. Edit an Agency-Managed Car (bid must be ACCEPTED)
+    @PutMapping(value = "/cars/{carId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Car> updateAgencyCar(
+            @PathVariable @Positive Long carId,
+            @Valid @RequestPart("car") Car car,
+            @RequestPart(value = "images", required = false) List<MultipartFile> images) throws IOException {
+        return ResponseEntity.ok(carService.updateCarByAgency(carId, car, images));
     }
 
     // 3. View Bids Accepted by Owners for Agency Cars

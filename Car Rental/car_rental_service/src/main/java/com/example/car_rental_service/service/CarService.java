@@ -14,6 +14,10 @@ public interface CarService {
 
     Car updateCar(Long id, Car updatedCar, List<MultipartFile> newImages) throws IOException;
 
+    Car updateCarByAgency(Long carId, Car updatedCar, List<MultipartFile> newImages) throws IOException;
+
+    Car recallCarFromAgency(Long id);
+
     Car processAgencyBid(Long carId, BidStatus status, String remarks);
 
     CarImage getCarImageByIndex(Long carId, int index);

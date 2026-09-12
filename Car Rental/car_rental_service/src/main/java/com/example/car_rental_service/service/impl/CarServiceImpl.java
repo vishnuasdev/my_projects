@@ -5,11 +5,14 @@ import com.example.car_rental_service.model.entity.CarImage;
 import com.example.car_rental_service.model.entity.users.Agency;
 import com.example.car_rental_service.model.entity.users.Owner;
 import com.example.car_rental_service.model.enums.BidStatus;
+import com.example.car_rental_service.model.entity.User;
 import com.example.car_rental_service.repository.AgencyRepository;
 import com.example.car_rental_service.repository.BidRepository;
 import com.example.car_rental_service.repository.CarRepository;
 import com.example.car_rental_service.repository.OwnerRepository;
+import com.example.car_rental_service.repository.UserRepository;
 import com.example.car_rental_service.service.CarService;
+import com.example.car_rental_service.util.ImageValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -30,28 +33,71 @@ public class CarServiceImpl implements CarService {
     private final OwnerRepository ownerRepository;
     private final AgencyRepository agencyRepository;
     private final BidRepository bidRepository;
+    private final UserRepository userRepository;
 
     public CarServiceImpl(CarRepository carRepository,
                           OwnerRepository ownerRepository,
                           AgencyRepository agencyRepository,
-                          BidRepository bidRepository) {
+                          BidRepository bidRepository,
+                          UserRepository userRepository) {
         this.carRepository = carRepository;
         this.ownerRepository = ownerRepository;
         this.agencyRepository = agencyRepository;
         this.bidRepository = bidRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
     public Car addCar(Car car, Long targetAgencyId, List<MultipartFile> images) throws IOException {
-        Owner owner = getCurrentOwner();
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean isAdmin = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ADMIN") || a.getAuthority().equals("ROLE_ADMIN"));
+
+        Owner owner;
+        if (isAdmin) {
+            if (car.getOwner() != null && car.getOwner().getId() != null) {
+                owner = ownerRepository.findById(car.getOwner().getId()).orElse(null);
+            } else {
+                owner = ownerRepository.findByEmail(auth.getName()).orElse(null);
+            }
+            if (owner == null) {
+                owner = ownerRepository.findAll().stream().findFirst().orElse(null);
+            }
+            if (owner == null) {
+                User adminUser = userRepository.findByEmail(auth.getName()).orElse(null);
+                if (adminUser != null) {
+                    Owner newOwner = new Owner();
+                    newOwner.setUser(adminUser);
+                    newOwner.setName(adminUser.getName());
+                    owner = ownerRepository.save(newOwner);
+                }
+            }
+        } else {
+            owner = getCurrentOwner();
+            if (targetAgencyId != null) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Owners cannot assign a vehicle directly to an agency. Submit an agency bid or use an approved owner authorization grant."
+                );
+            }
+        }
+
         car.setOwner(owner);
         car.setType(normalizeCarType(car.getType()));
         car.setAvailable(true);
-        car.setBidStatus(BidStatus.PENDING);
+        if (car.getBidStatus() == null) {
+            car.setBidStatus(targetAgencyId != null && isAdmin ? BidStatus.ACCEPTED : BidStatus.PENDING);
+        }
 
         if (targetAgencyId != null) {
             Agency agency = agencyRepository.findById(targetAgencyId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Target agency not found: " + targetAgencyId));
+            if (!isAdmin) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "You are not authorized to assign vehicles to this agency."
+                );
+            }
             car.setAgency(agency);
         }
 
@@ -77,6 +123,58 @@ public class CarServiceImpl implements CarService {
             processAndAttachImages(car, newImages, true);
         }
 
+        return carRepository.save(car);
+    }
+
+    @Override
+    public Car updateCarByAgency(Long carId, Car updatedCar, List<MultipartFile> newImages) throws IOException {
+        Car car = getCarById(carId);
+
+        if (car.getAgency() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This car is not assigned to any agency.");
+        }
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Agency agency = agencyRepository.findByUserEmail(auth.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Agency profile not found for authenticated user"));
+
+        if (!car.getAgency().getId().equals(agency.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This car is not assigned to your agency.");
+        }
+
+        if (car.getBidStatus() != BidStatus.ACCEPTED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You can only edit cars whose bid has been accepted.");
+        }
+
+        car.setBrand(updatedCar.getBrand());
+        car.setModel(updatedCar.getModel());
+        car.setRegistrationNo(updatedCar.getRegistrationNo());
+        car.setFuelType(updatedCar.getFuelType());
+        car.setTransmission(updatedCar.getTransmission());
+        car.setType(normalizeCarType(updatedCar.getType()));
+        car.setDailyRate(updatedCar.getDailyRate());
+        car.setDescription(updatedCar.getDescription());
+
+        if (newImages != null && !newImages.isEmpty()) {
+            processAndAttachImages(car, newImages, true);
+        }
+
+        return carRepository.save(car);
+    }
+
+    @Override
+    public Car recallCarFromAgency(Long id) {
+        Car car = getCarById(id);
+        validateOwnershipOrAdmin(car);
+
+        if (car.getAgency() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Car is not assigned to any agency.");
+        }
+
+        car.setAgency(null);
+        car.setAgencyRemarks(null);
+        car.setBidStatus(BidStatus.PENDING);
+        car.setAvailable(false);
         return carRepository.save(car);
     }
 
@@ -136,8 +234,8 @@ public class CarServiceImpl implements CarService {
     @Transactional
     public List<Car> getAllAvailableApprovedCars() {
         List<Car> availableCars = carRepository.findAvailableCarsForApprovedAgencies(BidStatus.ACCEPTED);
-        availableCars.forEach(car -> bidRepository.findFirstByCarIdAndStatusOrderByIdDesc(car.getId(), BidStatus.ACCEPTED)
-                .ifPresent(acceptedBid -> {
+        availableCars.forEach(car -> bidRepository.findLatestByCarIdAndStatus(car.getId(), BidStatus.ACCEPTED)
+                .stream().findFirst().ifPresent(acceptedBid -> {
                     boolean needsSynchronization = car.getAgency() == null
                             || !car.getAgency().getId().equals(acceptedBid.getAgency().getId())
                             || car.getBidStatus() != BidStatus.ACCEPTED
@@ -224,6 +322,8 @@ public class CarServiceImpl implements CarService {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot upload more than 5 images per car.");
                     }
 
+                    ImageValidator.validate(file);
+
                     String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
 
                     CarImage carImage = CarImage.builder()
@@ -252,7 +352,8 @@ public class CarServiceImpl implements CarService {
 
     private void validateOwnershipOrAdmin(Car car) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        boolean isAdmin = auth != null && auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ADMIN"));
+        boolean isAdmin = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ADMIN") || a.getAuthority().equals("ROLE_ADMIN"));
 
         if (!isAdmin && (car.getOwner() == null || !car.getOwner().getId().equals(getCurrentOwner().getId()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have rights to alter this vehicle record.");

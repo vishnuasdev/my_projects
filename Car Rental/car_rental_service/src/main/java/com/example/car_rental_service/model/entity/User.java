@@ -33,12 +33,13 @@ public class User {
     @Size(max = 254)
     private String email;
 
+    @Size(max = 30)
+    @Column(unique = true, length = 30)
+    private String phoneNumber;
+
     @Column(nullable = false)
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
-
-    @Size(max = 30)
-    private String phoneNumber;
 
     @NotNull
     @Enumerated(EnumType.STRING)

@@ -32,13 +32,13 @@ export const fleetApi = {
 
     createVehicle: async (vehicleData, images = []) => {
         const formData = createCarFormData(vehicleData, images);
-        const response = await API.post('/owner/cars', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        const response = await API.post('/owner/cars', formData);
         return response.data;
     },
 
     updateVehicle: async (id, vehicleData, images = []) => {
         const formData = createCarFormData(vehicleData, images);
-        const response = await API.put(`/owner/cars/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        const response = await API.put(`/owner/cars/${id}`, formData);
         return response.data;
     },
     deleteVehicleImage: async (id, index) => {
@@ -62,7 +62,7 @@ export const fleetApi = {
 
     updateVehicleAsAdmin: async (id, vehicleData, images = []) => {
         const formData = createCarFormData(vehicleData, images);
-        const response = await API.put(`/cars/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        const response = await API.put(`/cars/${id}`, formData);
         return response.data;
     },
 
@@ -79,7 +79,12 @@ export const fleetApi = {
 
 const createCarFormData = (vehicleData, images) => {
     const formData = new FormData();
-    formData.append('car', new Blob([JSON.stringify(vehicleData)], { type: 'application/json' }));
+    const safeVehicleData = { ...vehicleData };
+    delete safeVehicleData.owner;
+    delete safeVehicleData.agency;
+    delete safeVehicleData.ownerId;
+    delete safeVehicleData.agencyId;
+    formData.append('car', new Blob([JSON.stringify(safeVehicleData)], { type: 'application/json' }));
     images.forEach((image) => formData.append('images', image));
     return formData;
 };

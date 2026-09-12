@@ -1,6 +1,10 @@
 package com.example.car_rental_service.controller.users;
 
 import com.example.car_rental_service.model.dto.AgencyUpdateDto;
+import com.example.car_rental_service.model.dto.AdminPasswordUpdateDto;
+import com.example.car_rental_service.model.dto.AdminUserUpdateDto;
+import com.example.car_rental_service.model.dto.AdminUserCreateDto;
+import com.example.car_rental_service.model.entity.users.Customer;
 import com.example.car_rental_service.model.entity.Bid;
 import com.example.car_rental_service.model.entity.Booking;
 import com.example.car_rental_service.model.entity.Car;
@@ -41,18 +45,24 @@ public class AdminController {
     private final BookingService bookingService;
     private final AgencyService agencyService;
     private final OwnerService ownerService;
+    private final CustomerService customerService;
+    private final com.example.car_rental_service.service.AdminMonitoringService monitoringService;
 
     public AdminController(UserService userService,
                            CarService carService,
                            BidService bidService,
                            BookingService bookingService,
-                           AgencyService agencyService, OwnerService ownerService) {
+                           AgencyService agencyService, OwnerService ownerService,
+                           CustomerService customerService,
+                           com.example.car_rental_service.service.AdminMonitoringService monitoringService) {
         this.userService = userService;
         this.carService = carService;
         this.bidService = bidService;
         this.bookingService = bookingService;
         this.agencyService = agencyService;
         this.ownerService = ownerService;
+        this.customerService = customerService;
+        this.monitoringService = monitoringService;
     }
 
     // ==========================================
@@ -96,8 +106,16 @@ public class AdminController {
     // ==========================================
 
     @PostMapping("/users/register")
-    public ResponseEntity<User> registerUser(@Valid @RequestBody User user) {
+    public ResponseEntity<User> registerUser(@Valid @RequestBody AdminUserCreateDto request) {
+        User user = new User();
+        user.setName(request.name().trim());
+        user.setEmail(request.email().trim().toLowerCase());
+        user.setPhoneNumber(request.phoneNumber());
+        user.setPassword(request.password());
+        user.setRole(request.role());
+        user.setStatus(request.status());
         User registeredUser = userService.registerUser(user);
+        monitoringService.record("ADMIN_USER_CREATED", "Administrator created a " + request.role() + " account.", "INFO");
         return new ResponseEntity<>(registeredUser, HttpStatus.CREATED);
     }
 
@@ -137,8 +155,18 @@ public class AdminController {
     @PutMapping("/users/{id}")
     public ResponseEntity<User> updateUser(
             @PathVariable @Positive Long id,
-            @RequestBody User updatedUser) {
-        return ResponseEntity.ok(userService.updateUser(id, updatedUser));
+            @Valid @RequestBody AdminUserUpdateDto updatedUser) {
+        User result = userService.updateUserProfile(id, updatedUser);
+        monitoringService.record("ADMIN_PROFILE_UPDATED", "Administrator updated user #" + id + ".", "INFO");
+        return ResponseEntity.ok(result);
+    }
+
+    @PatchMapping("/users/{id}/password")
+    public ResponseEntity<Void> updateUserPassword(
+            @PathVariable @Positive Long id,
+            @Valid @RequestBody AdminPasswordUpdateDto update) {
+        userService.updateUserPassword(id, update);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/users/{id}/status")
@@ -158,6 +186,37 @@ public class AdminController {
             userService.deleteUser(id);
         }
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/customers")
+    public ResponseEntity<List<Customer>> getAllCustomers() {
+        return ResponseEntity.ok(customerService.getAllCustomers());
+    }
+
+    @GetMapping("/owners")
+    public ResponseEntity<List<Owner>> getAllOwners() {
+        return ResponseEntity.ok(ownerService.getAllOwners());
+    }
+
+    @GetMapping("/notifications")
+    public ResponseEntity<List<Map<String, Object>>> getNotifications(
+            @RequestParam(defaultValue = "25") int limit) {
+        return ResponseEntity.ok(monitoringService.recent(limit));
+    }
+
+    @GetMapping("/logs")
+    public ResponseEntity<List<Map<String, Object>>> getSystemLogs(
+            @RequestParam(defaultValue = "100") int limit) {
+        return ResponseEntity.ok(monitoringService.recentLogs(limit));
+    }
+
+    @PutMapping("/customers/{id}")
+    public ResponseEntity<Customer> updateCustomer(
+            @PathVariable @Positive Long id,
+            @RequestBody Customer updateData) {
+        return customerService.updateCustomerByAdmin(id, updateData)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     // ==========================================
@@ -215,6 +274,7 @@ public class AdminController {
             @RequestParam(value = "agencyId", required = false) Long agencyId,
             @RequestPart(value = "images", required = false) List<MultipartFile> images) throws IOException {
         Car savedCar = carService.addCar(car, agencyId, images);
+        monitoringService.record("VEHICLE_ADDED", "A new vehicle was added to the fleet.", "INFO");
         return new ResponseEntity<>(savedCar, HttpStatus.CREATED);
     }
 
@@ -323,6 +383,7 @@ public class AdminController {
             @PathVariable @Positive Long id,
             @RequestParam BookingStatus status) {
         Booking updatedBooking = bookingService.updateBookingStatus(id, status);
+        monitoringService.record("BOOKING_STATUS_CHANGED", "Booking #" + id + " changed to " + status + ".", "INFO");
         return ResponseEntity.ok(updatedBooking);
     }
 
@@ -334,7 +395,7 @@ public class AdminController {
 
     // --- ADMIN ENDPOINTS ---
 
-    @PutMapping("/admin/{id}")
+    @PutMapping(value = {"/admin/{id}", "/owners/{id}"})
     public ResponseEntity<Owner> updateOwnerByAdmin(
             @PathVariable @Positive Long id,
             @RequestBody Owner owner) {
@@ -343,7 +404,7 @@ public class AdminController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @DeleteMapping("/admin/{id}")
+    @DeleteMapping(value = {"/admin/{id}", "/owners/{id}"})
     public ResponseEntity<Void> deleteOwnerByAdmin(@PathVariable @Positive Long id) {
         boolean deleted = ownerService.deleteOwnerByAdmin(id);
         if (deleted) {

@@ -1,5 +1,6 @@
 package com.example.car_rental_service.service;
 
+import com.example.car_rental_service.model.entity.users.Customer;
 import com.example.car_rental_service.model.entity.users.Owner;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -30,6 +31,10 @@ public interface OwnerService {
     byte[] getOwnerImage(Long id);
 
     boolean deleteOwner(Long id);
+
+    Owner getMyProfile();
+
+    void removeMyProfileImage();
 
     // --- ADMIN OPERATIONS ---
     Optional<Owner> updateOwnerByAdmin(Long id, Owner updateData);

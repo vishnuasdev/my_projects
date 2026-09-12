@@ -51,12 +51,19 @@ public class SecurityConfig {
                         // 2. Public car catalog and images only (not owner/agency listings)
                         .requestMatchers(HttpMethod.GET, "/api/cars/available").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/cars/*/image/*").permitAll()
+                        // A single car path is public; nested paths remain protected by the
+                        // more specific matchers above or the authenticated fallback.
+                        .requestMatchers(HttpMethod.GET, "/api/cars/*").permitAll()
 
                         // 3. Shared Operations
                         .requestMatchers(HttpMethod.GET, "/api/cars/my-cars").hasAuthority("OWNER")
                         .requestMatchers(HttpMethod.GET, "/api/cars/agency/**").hasAnyAuthority("AGENCY", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/cars/owner/**").hasAnyAuthority("OWNER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/cars/add", "/api/cars/create")
+                        .hasAnyAuthority("ADMIN", "AGENCY", "OWNER")
+                        .requestMatchers(HttpMethod.PUT, "/api/cars/**")
+                        .hasAnyAuthority("ADMIN", "OWNER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/cars/**")
                         .hasAnyAuthority("ADMIN", "AGENCY", "OWNER")
                         .requestMatchers(HttpMethod.DELETE, "/api/cars/**")
                         .hasAnyAuthority("ADMIN", "OWNER")
@@ -70,6 +77,14 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.POST, "/api/bookings/create")
                         .hasAuthority("CUSTOMER")
+                        .requestMatchers(HttpMethod.GET, "/api/bookings/customer/**")
+                        .hasAnyAuthority("CUSTOMER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/bookings/agency/**")
+                        .hasAnyAuthority("AGENCY", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/bookings/car/**")
+                        .hasAnyAuthority("OWNER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/bookings/*")
+                        .hasAnyAuthority("CUSTOMER", "AGENCY", "ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/bookings/*/status")
                         .hasAuthority("AGENCY")
                         .requestMatchers(HttpMethod.PATCH, "/api/bookings/*/cancel")
@@ -77,6 +92,7 @@ public class SecurityConfig {
 
                         // 4. Role-Specific Section Matchers
                         .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
+                        .requestMatchers("/api/reports/**").hasAuthority("ADMIN")
                         .requestMatchers("/api/agency/**").hasAuthority("AGENCY")
                         .requestMatchers("/api/owner/**").hasAuthority("OWNER")
                         .requestMatchers("/api/customers/admin/**").hasAuthority("ADMIN")
@@ -90,7 +106,10 @@ public class SecurityConfig {
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                             response.setContentType("application/json");
-                            response.getWriter().write("{\"error\": \"Unauthorized: Missing or invalid JWT token\"}");
+                            response.setHeader("X-Auth-Failure-Path", request.getRequestURI());
+                            response.getWriter().write("{\"error\":\"Unauthorized: Missing or invalid JWT token\",\"path\":\""
+                                    + request.getRequestURI().replace("\"", "")
+                                    + "\"}");
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);

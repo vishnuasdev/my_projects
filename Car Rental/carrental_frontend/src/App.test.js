@@ -3,5 +3,5 @@ import App from './App';
 
 test('renders the car rental application', () => {
   render(<App />);
-  expect(screen.getByText('CarRental System')).toBeInTheDocument();
+  expect(screen.getByText('Car Rental')).toBeInTheDocument();
 });

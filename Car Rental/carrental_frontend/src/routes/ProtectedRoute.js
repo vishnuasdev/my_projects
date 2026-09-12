@@ -15,7 +15,13 @@ const ProtectedRoute = ({ allowedRoles, publicOnly = false, allowAuthenticated =
   }
 
   // Normalize role string to uppercase (handles AGENCY, ADMIN, OWNER, CUSTOMER)
-  const userRole = user?.role ? String(user.role).toUpperCase() : null;
+  const rawRole = user?.role || user?.roles || user?.authorities;
+  const userRoleValue = Array.isArray(rawRole)
+    ? (rawRole[0]?.authority || rawRole[0])
+    : (rawRole?.authority || rawRole);
+  const userRole = userRoleValue
+    ? String(userRoleValue).toUpperCase().replace(/^ROLE_/, '')
+    : null;
 
   // Map normalized roles to default dashboards
   const getDashboardPath = (role) => {
@@ -48,7 +54,9 @@ const ProtectedRoute = ({ allowedRoles, publicOnly = false, allowAuthenticated =
       return <Navigate to="/login" replace />;
     }
 
-    const normalizedAllowedRoles = allowedRoles.map((r) => String(r).toUpperCase());
+    const normalizedAllowedRoles = allowedRoles.map((r) =>
+      String(r).toUpperCase().replace(/^ROLE_/, '')
+    );
 
     if (!normalizedAllowedRoles.includes(userRole)) {
       return <Navigate to={getDashboardPath(userRole)} replace />;

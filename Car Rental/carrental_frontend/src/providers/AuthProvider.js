@@ -4,13 +4,18 @@ import { loginUser, registerUser } from '../features/auth/api/authApi';
 
 export const AuthContext = createContext(null);
 
-const normalizeRole = (userInfo) => {
+export const normalizeRole = (userInfo) => {
   if (!userInfo) return null;
-  const rawRole = userInfo.role || userInfo.roles;
-  const role = Array.isArray(rawRole) ? rawRole[0] : rawRole;
+  const source = userInfo.user && typeof userInfo.user === 'object'
+    ? { ...userInfo, ...userInfo.user }
+    : userInfo;
+  const rawRole = source.role || source.roles || source.authorities;
+  const role = Array.isArray(rawRole)
+    ? (rawRole[0]?.authority || rawRole[0])
+    : (rawRole?.authority || rawRole);
 
   return {
-    ...userInfo,
+    ...source,
     role: String(role || '').toUpperCase().replace('ROLE_', ''),
   };
 };
@@ -51,7 +56,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     const data = await loginUser(credentials);
     const token = data.token || data.jwt;
-    const rawUserInfo = { ...(data.user ? data.user : data) };
+    const rawUserInfo = { ...data };
 
     delete rawUserInfo.token;
     delete rawUserInfo.jwt;

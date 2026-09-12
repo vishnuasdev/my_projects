@@ -18,17 +18,37 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByCustomerId(Long customerId);
 
+    @Query("SELECT b FROM Booking b WHERE b.customer.id = :customerId AND b.customer.user.email = :email")
+    List<Booking> findByCustomerIdAndCustomerUserEmail(@Param("customerId") Long customerId,
+                                                        @Param("email") String email);
+
     @Query("SELECT b FROM Booking b WHERE b.customer.user.email = :email")
     List<Booking> findByCustomerUserEmail(@Param("email") String email);
 
     List<Booking> findByCarId(Long carId);
+
+    @Query("SELECT b FROM Booking b WHERE b.car.id = :carId AND b.car.owner.user.email = :email")
+    List<Booking> findByCarIdAndCarOwnerUserEmail(@Param("carId") Long carId, @Param("email") String email);
 
     @Query("SELECT b FROM Booking b WHERE b.car.agency.id = :agencyId")
     List<Booking> findByAgencyId(@Param("agencyId") Long agencyId);
 
     List<Booking> findByCarAgencyId(Long agencyId);
 
+    @Query("SELECT b FROM Booking b WHERE b.car.agency.id = :agencyId AND b.car.agency.user.email = :email")
+    List<Booking> findByCarAgencyIdAndAgencyUserEmail(@Param("agencyId") Long agencyId,
+                                                       @Param("email") String email);
+
     Optional<Booking> findByIdAndCarAgencyId(Long id, Long agencyId);
+
+    @Query("SELECT b FROM Booking b WHERE b.id = :id AND b.customer.user.email = :email")
+    Optional<Booking> findByIdAndCustomerUserEmail(@Param("id") Long id, @Param("email") String email);
+
+    @Query("SELECT b FROM Booking b WHERE b.id = :id AND b.car.agency.user.email = :email")
+    Optional<Booking> findByIdAndAgencyUserEmail(@Param("id") Long id, @Param("email") String email);
+
+    @Query("SELECT b FROM Booking b WHERE b.car.owner.user.email = :email")
+    List<Booking> findByCarOwnerUserEmail(@Param("email") String email);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT b FROM Booking b WHERE b.id = :id")

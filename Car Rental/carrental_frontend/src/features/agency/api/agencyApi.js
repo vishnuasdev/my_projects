@@ -29,7 +29,7 @@ export const agencyApi = {
     updateImage: async (id, image) => (await API.patch(`/agency/${id}/image`, createImageFormData(image))).data,
     remove: async (id) => (await API.delete(`/agency/${id}`)).data,
     getCars: async () => (await API.get('/agency/cars')).data,
-    updateCar: async (id, car, images = []) => (await API.put(`/agency/cars/${id}`, createCarFormData(car, images), { headers: { 'Content-Type': 'multipart/form-data' } })).data,
+    updateCar: async (id, car, images = []) => (await API.put(`/agency/cars/${id}`, createCarFormData(car, images))).data,
     setCarAvailability: async (carId, available) => (await API.patch(`/agency/cars/${carId}/availability`, null, { params: { available } })).data,
     getAcceptedBids: async () => (await API.get('/agency/bids/accepted')).data,
     getBids: async () => (await API.get('/agency/bids')).data,

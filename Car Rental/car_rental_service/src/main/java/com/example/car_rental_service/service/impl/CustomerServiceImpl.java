@@ -7,6 +7,7 @@ import com.example.car_rental_service.model.enums.Role;
 import com.example.car_rental_service.repository.CustomerRepository;
 import com.example.car_rental_service.repository.UserRepository;
 import com.example.car_rental_service.service.CustomerService;
+import com.example.car_rental_service.util.ImageValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -58,6 +59,7 @@ public class CustomerServiceImpl implements CustomerService {
         customer.setUser(user);
 
         if (image != null && !image.isEmpty()) {
+            ImageValidator.validate(image);
             customer.setImageType(image.getContentType());
             customer.setProfileImage(image.getBytes());
         }
@@ -79,6 +81,15 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<Customer> getCustomerByIdForCurrentUser(Long id) {
+        String email = getAuthenticatedUserEmail();
+        return customerRepository.findById(id)
+                .filter(customer -> customer.getUser() != null
+                        && email.equalsIgnoreCase(customer.getUser().getEmail()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Customer getCustomerByUserId(Long userId) {
         return customerRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer profile not found for User ID: " + userId));
@@ -94,12 +105,6 @@ public class CustomerServiceImpl implements CustomerService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only update your own customer profile.");
         }
 
-        if (updatedCustomer.getProfileName() != null && !updatedCustomer.getProfileName().isBlank()) {
-            existingCustomer.getUser().setName(updatedCustomer.getProfileName().trim());
-        }
-        if (updatedCustomer.getProfilePhone() != null) {
-            existingCustomer.getUser().setPhoneNumber(updatedCustomer.getProfilePhone().trim());
-        }
         existingCustomer.setDob(updatedCustomer.getDob());
         existingCustomer.setLicenseNo(updatedCustomer.getLicenseNo());
         existingCustomer.setLocation(updatedCustomer.getLocation());
@@ -109,12 +114,11 @@ public class CustomerServiceImpl implements CustomerService {
         }
 
         if (image != null && !image.isEmpty()) {
+            ImageValidator.validate(image);
             existingCustomer.setImageType(image.getContentType());
             existingCustomer.setProfileImage(image.getBytes());
         }
 
-        existingCustomer.setProfileName(existingCustomer.getUser().getName());
-        existingCustomer.setProfilePhone(existingCustomer.getUser().getPhoneNumber());
         return customerRepository.save(existingCustomer);
     }
 
@@ -128,12 +132,6 @@ public class CustomerServiceImpl implements CustomerService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only update your own customer profile.");
         }
 
-        if (partialCustomer.getProfileName() != null && !partialCustomer.getProfileName().isBlank()) {
-            customer.getUser().setName(partialCustomer.getProfileName().trim());
-        }
-        if (partialCustomer.getProfilePhone() != null) {
-            customer.getUser().setPhoneNumber(partialCustomer.getProfilePhone().trim());
-        }
         if (partialCustomer.getDob() != null && !partialCustomer.getDob().isBlank()) {
             customer.setDob(partialCustomer.getDob());
         }
@@ -147,8 +145,6 @@ public class CustomerServiceImpl implements CustomerService {
             customer.setAddress(partialCustomer.getAddress());
         }
 
-        customer.setProfileName(customer.getUser().getName());
-        customer.setProfilePhone(customer.getUser().getPhoneNumber());
         return customerRepository.save(customer);
     }
 
@@ -166,6 +162,7 @@ public class CustomerServiceImpl implements CustomerService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Image file cannot be empty.");
         }
 
+        ImageValidator.validate(image);
         customer.setImageType(image.getContentType());
         customer.setProfileImage(image.getBytes());
 
@@ -182,6 +179,17 @@ public class CustomerServiceImpl implements CustomerService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No profile image found for customer ID: " + id);
         }
 
+        return customer.getProfileImage();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] getCustomerImageForCurrentUser(Long id) {
+        Customer customer = getCustomerByIdForCurrentUser(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"));
+        if (customer.getProfileImage() == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No profile image found");
+        }
         return customer.getProfileImage();
     }
 
@@ -210,6 +218,49 @@ public class CustomerServiceImpl implements CustomerService {
             customerRepository.delete(customer);
             return true;
         }).orElse(false);
+    }
+
+    @Override
+    public Customer getMyProfile() {
+        return getAuthenticatedCustomer();
+    }
+
+    @Override
+    public Customer updateMyProfile(Customer updatedCustomer, MultipartFile image) throws IOException {
+        Customer currentCustomer = getAuthenticatedCustomer();
+
+        if (updatedCustomer.getName() != null && !updatedCustomer.getName().isBlank()
+                || updatedCustomer.getPhoneNumber() != null && !updatedCustomer.getPhoneNumber().isBlank()) {
+            User user = currentCustomer.getUser();
+            if (user != null) {
+                if (updatedCustomer.getName() != null && !updatedCustomer.getName().isBlank()) {
+                    user.setName(updatedCustomer.getName().trim());
+                }
+                if (updatedCustomer.getPhoneNumber() != null && !updatedCustomer.getPhoneNumber().isBlank()) {
+                    user.setPhoneNumber(updatedCustomer.getPhoneNumber().trim());
+                }
+                userRepository.save(user);
+            }
+        }
+
+        return updateCustomer(currentCustomer.getId(), updatedCustomer, image);
+    }
+
+    @Override
+    public void removeMyProfileImage() {
+        removeCustomerImage(getAuthenticatedCustomer().getId());
+    }
+
+    private Customer getAuthenticatedCustomer() {
+        String email = getAuthenticatedUserEmail();
+        return customerRepository.findByUserEmail(email)
+                .orElseGet(() -> {
+                    User user = userRepository.findByEmail(email)
+                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User profile not found for email: " + email));
+                    Customer newCustomer = new Customer();
+                    newCustomer.setUser(user);
+                    return customerRepository.save(newCustomer);
+                });
     }
 
     // --- ADMIN OPERATIONS ---

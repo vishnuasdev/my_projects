@@ -15,6 +15,7 @@ public interface CustomerService {
     List<Customer> getAllCustomers();
 
     Optional<Customer> getCustomerById(Long id);
+    Optional<Customer> getCustomerByIdForCurrentUser(Long id);
 
     Customer getCustomerByUserId(Long userId);
 
@@ -25,10 +26,17 @@ public interface CustomerService {
     Customer updateCustomerImage(Long id, MultipartFile image) throws IOException;
 
     byte[] getCustomerImage(Long id);
+    byte[] getCustomerImageForCurrentUser(Long id);
 
     void removeCustomerImage(Long id);
 
     boolean deleteCustomer(Long id);
+
+    Customer getMyProfile();
+
+    Customer updateMyProfile(Customer updatedCustomer, MultipartFile image) throws IOException;
+
+    void removeMyProfileImage();
 
     // --- ADMIN OPERATIONS ---
     Optional<Customer> updateCustomerByAdmin(Long id, Customer updateData);

@@ -7,6 +7,7 @@ import com.example.car_rental_service.model.enums.Role;
 import com.example.car_rental_service.repository.OwnerRepository;
 import com.example.car_rental_service.repository.UserRepository;
 import com.example.car_rental_service.service.OwnerService;
+import com.example.car_rental_service.util.ImageValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -60,6 +61,7 @@ public class OwnerServiceImpl implements OwnerService {
         owner.setUser(user);
 
         if (image != null && !image.isEmpty()) {
+            ImageValidator.validate(image);
             owner.setImageType(image.getContentType());
             owner.setProfileImage(image.getBytes());
         }
@@ -89,7 +91,6 @@ public class OwnerServiceImpl implements OwnerService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only update your own owner profile.");
         }
 
-        existingOwner.setName(updatedOwner.getName());
         existingOwner.setDob(updatedOwner.getDob());
         existingOwner.setLocation(updatedOwner.getLocation());
 
@@ -98,6 +99,7 @@ public class OwnerServiceImpl implements OwnerService {
         }
 
         if (image != null && !image.isEmpty()) {
+            ImageValidator.validate(image);
             existingOwner.setImageType(image.getContentType());
             existingOwner.setProfileImage(image.getBytes());
         }
@@ -115,9 +117,6 @@ public class OwnerServiceImpl implements OwnerService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only update your own owner profile.");
         }
 
-        if (partialOwner.getName() != null && !partialOwner.getName().isBlank()) {
-            owner.setName(partialOwner.getName());
-        }
         if (partialOwner.getDob() != null && !partialOwner.getDob().isBlank()) {
             owner.setDob(partialOwner.getDob());
         }
@@ -145,6 +144,7 @@ public class OwnerServiceImpl implements OwnerService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Image file cannot be empty.");
         }
 
+        ImageValidator.validate(image);
         owner.setImageType(image.getContentType());
         owner.setProfileImage(image.getBytes());
 
@@ -176,6 +176,17 @@ public class OwnerServiceImpl implements OwnerService {
         }).orElse(false);
     }
 
+    @Override
+    public Owner getMyProfile() {
+        return getAuthenticatedOwner();
+    }
+
+    private Owner getAuthenticatedOwner() {
+        String email = getAuthenticatedUserEmail();
+        return ownerRepository.findByUserEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Owner profile not found for email: " + email));
+    }
+
     // --- ADMIN OPERATIONS ---
 
     @Override
@@ -187,9 +198,6 @@ public class OwnerServiceImpl implements OwnerService {
 
         Owner owner = optionalOwner.get();
 
-        if (updateData.getName() != null) {
-            owner.setName(updateData.getName());
-        }
         if (updateData.getDob() != null) {
             owner.setDob(updateData.getDob());
         }
@@ -258,12 +266,20 @@ public class OwnerServiceImpl implements OwnerService {
                     return newOwner;
                 });
 
-        if (updatedOwnerData.getName() != null) owner.setName(updatedOwnerData.getName());
+        if (updatedOwnerData.getName() != null && !updatedOwnerData.getName().isBlank()) {
+            user.setName(updatedOwnerData.getName().trim());
+        }
+        if (updatedOwnerData.getPhoneNumber() != null && !updatedOwnerData.getPhoneNumber().isBlank()) {
+            user.setPhoneNumber(updatedOwnerData.getPhoneNumber().trim());
+        }
+        userRepository.save(user);
+
         if (updatedOwnerData.getDob() != null) owner.setDob(updatedOwnerData.getDob());
         if (updatedOwnerData.getLocation() != null) owner.setLocation(updatedOwnerData.getLocation());
         if (updatedOwnerData.getAddress() != null) owner.setAddress(updatedOwnerData.getAddress());
 
         if (imageFile != null && !imageFile.isEmpty()) {
+            ImageValidator.validate(imageFile);
             owner.setProfileImage(imageFile.getBytes());
             owner.setImageType(imageFile.getContentType());
         }
@@ -277,5 +293,15 @@ public class OwnerServiceImpl implements OwnerService {
         return ownerRepository.findById(ownerId)
                 .map(Owner::getProfileImage)
                 .orElse(new byte[0]);
+    }
+
+    @Override
+    @Transactional
+    public void removeMyProfileImage() {
+        Owner owner = ownerRepository.findByUserEmail(getAuthenticatedUserEmail())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Owner profile not found."));
+        owner.setProfileImage(null);
+        owner.setImageType(null);
+        ownerRepository.save(owner);
     }
 }

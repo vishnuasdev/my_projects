@@ -3,6 +3,7 @@ package com.example.car_rental_service.model.entity.users;
 import com.example.car_rental_service.model.entity.Address;
 import com.example.car_rental_service.model.entity.User;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -21,10 +22,8 @@ public class Owner {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;    
 
-    @Size(max = 100)
-    private String name;
-    @JsonIgnore
     private String dob;
+
     @Size(max = 150)
     private String location;
 
@@ -45,4 +44,39 @@ public class Owner {
     @Valid
     @JsonIgnore
     private Address address;
+
+    @Transient
+    private String name;
+
+    @Transient
+    private String phoneNumber;
+
+    @JsonProperty("name")
+    public String getName() {
+        if (user != null && user.getName() != null && !user.getName().isBlank()) {
+            return user.getName();
+        }
+        return this.name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    @JsonProperty("email")
+    public String getEmail() {
+        return user != null ? user.getEmail() : null;
+    }
+
+    @JsonProperty("phone")
+    public String getPhoneNumber() {
+        if (user != null && user.getPhoneNumber() != null && !user.getPhoneNumber().isBlank()) {
+            return user.getPhoneNumber();
+        }
+        return this.phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
 }

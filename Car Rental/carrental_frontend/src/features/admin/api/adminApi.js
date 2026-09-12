@@ -2,13 +2,22 @@ import API from '../../../services/axiosInstance';
 
 export const adminApi = {
     getSummary: async () => (await API.get('/admin/summary')).data,
+    getNotifications: async () => (await API.get('/admin/notifications')).data,
+    getLogs: async () => (await API.get('/admin/logs')).data,
     getUsers: async () => (await API.get('/admin/users')).data,
     getUser: async (id) => (await API.get(`/admin/users/${id}`)).data,
     getUserByEmail: async (email) => (await API.get('/admin/users/email', { params: { email } })).data,
+    getCustomers: async () => (await API.get('/admin/customers')).data,
+    getOwners: async () => (await API.get('/admin/owners')).data,
     getUsersByRole: async (role) => (await API.get(`/admin/users/role/${role}`)).data,
     getUsersByStatus: async (status) => (await API.get(`/admin/users/status/${status}`)).data,
     registerUser: async (user) => (await API.post('/admin/users/register', user)).data,
     updateUser: async (id, user) => (await API.put(`/admin/users/${id}`, user)).data,
+    updateUserPassword: async (id, password) => (await API.patch(`/admin/users/${id}/password`, { password })).data,
+    updateCustomer: async (id, customer) => (await API.put(`/admin/customers/${id}`, customer)).data,
+    removeCustomer: async (id) => (await API.delete(`/admin/customers/admin/${id}`)).data,
+    updateOwner: async (id, owner) => (await API.put(`/admin/owners/${id}`, owner)).data,
+    removeOwner: async (id) => (await API.delete(`/admin/owners/${id}`)).data,
     updateUserStatus: async (id, status) => (await API.patch(`/admin/users/${id}/status`, null, { params: { status } })).data,
     removeUser: async (id) => (await API.delete(`/admin/users/${id}`)).data,
     getAgencies: async (status) => (await API.get('/admin/agencies', { params: status && { status } })).data,
@@ -24,7 +33,7 @@ export const adminApi = {
         formData.append('car', new Blob([JSON.stringify(car)], { type: 'application/json' }));
         if (agencyId) formData.append('agencyId', agencyId);
         images.forEach((image) => formData.append('images', image));
-        return (await API.post('/admin/cars/add', formData, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
+        return (await API.post('/admin/cars/add', formData)).data;
     },
     removeCar: async (id) => (await API.delete(`/admin/cars/${id}`)).data,
     getBids: async () => (await API.get('/admin/bids')).data,

@@ -31,11 +31,12 @@ const getConfig = (role) => {
     return config;
 };
 
-const createProfileFormData = (profileData, image) => {
+const createProfileFormData = (role, profileData, image) => {
     const formData = new FormData();
+    const profilePartName = `${normalizeRole(role)}`;
 
     formData.append(
-        'profile',
+        profilePartName,
         new Blob(
             [JSON.stringify(profileData)],
             { type: 'application/json' }
@@ -65,6 +66,7 @@ export const updateProfileByRole = async (
     const config = getConfig(role);
 
     const formData = createProfileFormData(
+        role,
         profileData,
         image
     );

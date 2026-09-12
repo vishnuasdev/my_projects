@@ -2,6 +2,7 @@ package com.example.car_rental_service.controller;
 
 import com.example.car_rental_service.model.entity.Car;
 import com.example.car_rental_service.model.entity.CarImage;
+import com.example.car_rental_service.model.dto.response.PublicCarResponse;
 import com.example.car_rental_service.model.enums.BidStatus;
 import com.example.car_rental_service.service.CarService;
 import jakarta.validation.Valid;
@@ -66,8 +67,10 @@ public class CarController {
 
     // public method this only
     @GetMapping("/available")
-    public ResponseEntity<List<Car>> getAllAvailableCars() {
-        return ResponseEntity.ok(carService.getAllAvailableApprovedCars());
+    public ResponseEntity<List<PublicCarResponse>> getAllAvailableCars() {
+        return ResponseEntity.ok(carService.getAllAvailableApprovedCars().stream()
+                .map(PublicCarResponse::from)
+                .toList());
     }
 
     @GetMapping("/my-cars")
@@ -86,8 +89,8 @@ public class CarController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Car> getCarById(@PathVariable @Positive Long id) {
-        return ResponseEntity.ok(carService.getPublicCarById(id));
+    public ResponseEntity<PublicCarResponse> getCarById(@PathVariable @Positive Long id) {
+        return ResponseEntity.ok(PublicCarResponse.from(carService.getPublicCarById(id)));
     }
 
     @PatchMapping("/{id}/availability")

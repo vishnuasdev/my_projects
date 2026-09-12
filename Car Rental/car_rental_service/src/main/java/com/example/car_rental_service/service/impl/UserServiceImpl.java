@@ -1,6 +1,9 @@
 package com.example.car_rental_service.service.impl;
 
 import com.example.car_rental_service.model.entity.User;
+import com.example.car_rental_service.model.dto.AdminPasswordUpdateDto;
+import com.example.car_rental_service.model.dto.AdminUserUpdateDto;
+import com.example.car_rental_service.model.dto.UserPasswordChangeDto;
 import com.example.car_rental_service.model.enums.Role;
 import com.example.car_rental_service.model.enums.UserStatus;
 import com.example.car_rental_service.repository.UserRepository;
@@ -33,14 +36,23 @@ public class UserServiceImpl implements UserService {
         if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email cannot be null or empty.");
         }
-        if (user.getPassword() == null || user.getPassword().length() < 6) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 6 characters long.");
+        if (user.getPassword() == null
+                || user.getPassword().length() < 8
+                || user.getPassword().length() > 72
+                || !user.getPassword().matches("^(?=.*[A-Za-z])(?=.*\\d).+$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Password must be 8-72 characters and contain letters and numbers.");
         }
 
         String normalizedEmail = user.getEmail().trim().toLowerCase();
 
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An account with this email already exists: " + normalizedEmail);
+        }
+
+        String normalizedPhone = normalizePhone(user.getPhoneNumber());
+        if (normalizedPhone != null && userRepository.existsByPhoneNumber(normalizedPhone)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this mobile number already exists.");
         }
 
         if (user.getRole() == Role.ADMIN) {
@@ -52,6 +64,7 @@ public class UserServiceImpl implements UserService {
         }
 
         user.setEmail(normalizedEmail);
+        user.setPhoneNumber(normalizedPhone);
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         return userRepository.save(user);
     }
@@ -112,12 +125,16 @@ public class UserServiceImpl implements UserService {
     @Override
     public User updateUser(Long id, User updatedUser) {
         User existingUser = getUserById(id);
-
-        if (updatedUser.getName() != null && !updatedUser.getName().trim().isEmpty()) {
-            existingUser.setName(updatedUser.getName().trim());
+        
+        if (updatedUser.getName() != null) {
+            existingUser.setName(updatedUser.getName());
         }
         if (updatedUser.getPhoneNumber() != null) {
-            existingUser.setPhoneNumber(updatedUser.getPhoneNumber());
+            String phone = normalizePhone(updatedUser.getPhoneNumber());
+            if (phone != null && userRepository.existsByPhoneNumberAndIdNot(phone, id)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this mobile number already exists.");
+            }
+            existingUser.setPhoneNumber(phone);
         }
         if (updatedUser.getRole() != null) {
             existingUser.setRole(updatedUser.getRole());
@@ -130,6 +147,64 @@ public class UserServiceImpl implements UserService {
         }
 
         return userRepository.save(existingUser);
+    }
+
+    @Override
+    public User updateUserProfile(Long id, AdminUserUpdateDto update) {
+        User existingUser = getUserById(id);
+        String email = update.email().trim().toLowerCase();
+        userRepository.findByEmail(email)
+                .filter(user -> !user.getId().equals(id))
+                .ifPresent(user -> {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists.");
+                });
+
+        existingUser.setName(update.name().trim());
+        existingUser.setEmail(email);
+        String phone = normalizePhone(update.phoneNumber());
+        if (phone != null && userRepository.existsByPhoneNumberAndIdNot(phone, id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this mobile number already exists.");
+        }
+        existingUser.setPhoneNumber(phone);
+        if (update.role() != null) {
+            existingUser.setRole(update.role());
+        }
+        if (update.status() != null) {
+            existingUser.setStatus(update.status());
+        }
+        return userRepository.save(existingUser);
+    }
+
+    @Override
+    public void updateUserPassword(Long id, AdminPasswordUpdateDto update) {
+        User existingUser = getUserById(id);
+        existingUser.setPassword(passwordEncoder.encode(update.password()));
+        userRepository.save(existingUser);
+    }
+
+    @Override
+    public void changeOwnPassword(String email, UserPasswordChangeDto update) {
+        User user = userRepository.findByEmail(email.trim().toLowerCase())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User account not found."));
+        if (!passwordEncoder.matches(update.currentPassword(), user.getPassword())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect.");
+        }
+        if (passwordEncoder.matches(update.newPassword(), user.getPassword())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password must be different from the current password.");
+        }
+        user.setPassword(passwordEncoder.encode(update.newPassword()));
+        userRepository.save(user);
+    }
+
+    private String normalizePhone(String phone) {
+        if (phone == null || phone.isBlank()) {
+            return null;
+        }
+        String normalized = phone.trim();
+        if (!normalized.matches("^\\+?[0-9][0-9\\s-]{6,29}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mobile number format is invalid.");
+        }
+        return normalized;
     }
 
     @Override

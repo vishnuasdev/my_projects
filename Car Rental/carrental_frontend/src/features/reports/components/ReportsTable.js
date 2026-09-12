@@ -40,7 +40,7 @@ const ReportsTable = ({ reports, onEdit, onDelete, isLoading }) => {
                                     {report.status}
                                 </span>
                             </td>
-                            <td>{new Date(report.createdDate).toLocaleDateString()}</td>
+                            <td>{report.createdDate ? new Date(report.createdDate).toLocaleDateString() : '-'}</td>
                             <td className="actions-cell">
                                 <button 
                                     className="btn btn-sm btn-primary"

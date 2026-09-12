@@ -34,14 +34,6 @@ public class Customer {
     @Size(max = 150)
     private String location;
 
-    @Transient
-    @JsonProperty("name")
-    private String profileName;
-
-    @Transient
-    @JsonProperty("phone")
-    private String profilePhone;
-
     private String imageType;
 
     @Lob
@@ -49,17 +41,52 @@ public class Customer {
     @JsonIgnore
     private byte[] profileImage;
 
-    @OneToOne(fetch = FetchType.LAZY)
+    @OneToOne
     @JoinColumn(name = "user_id", referencedColumnName = "id", nullable = false, unique = true)
     @JsonIgnore
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private User user;
 
-    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "address_id", referencedColumnName = "id")
     @Valid
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private Address address;
+
+    @Transient
+    private String name;
+
+    @Transient
+    private String phoneNumber;
+
+    @JsonProperty("name")
+    public String getName() {
+        if (user != null && user.getName() != null && !user.getName().isBlank()) {
+            return user.getName();
+        }
+        return this.name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    @JsonProperty("email")
+    public String getEmail() {
+        return user != null ? user.getEmail() : null;
+    }
+
+    @JsonProperty("phone")
+    public String getPhoneNumber() {
+        if (user != null && user.getPhoneNumber() != null && !user.getPhoneNumber().isBlank()) {
+            return user.getPhoneNumber();
+        }
+        return this.phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
 }

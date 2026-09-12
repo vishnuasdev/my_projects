@@ -10,7 +10,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class OwnerProfileResponseDto {
     private Long id;
-    private String name;
     private String dob;
     private String location;
     private String imageType;

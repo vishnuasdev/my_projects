@@ -60,6 +60,9 @@ public class BookingServiceImpl implements BookingService {
     @Transactional
     public Booking createBooking(Booking booking) {
         validateBookingDates(booking);
+        if (booking.getCar() == null || booking.getCar().getId() == null) {
+            throw new IllegalArgumentException("A valid car is required.");
+        }
 
         if (bookingRepository.existsOverlappingBooking(booking.getCar().getId(), booking.getStartDate(), booking.getEndDate())) {
             throw new IllegalStateException("Car is already reserved for the selected date range.");
@@ -142,6 +145,18 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<Booking> getBookingByIdForCustomer(Long id, String email) {
+        return bookingRepository.findByIdAndCustomerUserEmail(id, email);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Booking> getBookingByIdForAgency(Long id, String email) {
+        return bookingRepository.findByIdAndAgencyUserEmail(id, email);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<Booking> getBookingsByCustomer(Long customerId) {
         return bookingRepository.findByCustomerId(customerId);
     }
@@ -154,14 +169,38 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<Booking> getBookingsByCustomerForUser(Long customerId, String email) {
+        return bookingRepository.findByCustomerIdAndCustomerUserEmail(customerId, email);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<Booking> getBookingsByCar(Long carId) {
         return bookingRepository.findByCarId(carId);
     }
 
     @Override
     @Transactional(readOnly = true)
+    public List<Booking> getBookingsByOwnerEmail(String email) {
+        return bookingRepository.findByCarOwnerUserEmail(email);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Booking> getBookingsByCarForOwner(Long carId, String email) {
+        return bookingRepository.findByCarIdAndCarOwnerUserEmail(carId, email);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<Booking> getBookingsByAgency(Long agencyId) {
         return bookingRepository.findByAgencyId(agencyId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Booking> getBookingsByAgencyForUser(Long agencyId, String email) {
+        return bookingRepository.findByCarAgencyIdAndAgencyUserEmail(agencyId, email);
     }
 
     @Override
@@ -185,9 +224,8 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public Booking updateBookingStatus(Long bookingId, BookingStatus status) {
-        if (status == BookingStatus.CONFIRMED) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Only the assigned agency can confirm a customer booking.");
+        if (status == null) {
+            throw new IllegalArgumentException("Booking status is required.");
         }
         String email = getAuthenticatedUserEmail();
         Agency agency = agencyRepository.findByUserEmail(email)
